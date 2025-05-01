@@ -25,17 +25,17 @@ def create_app():
     @app.route('/api/hostels', methods=['GET'])
     def get_hostels():
         hostels = Hostel.query.all()
-        return jsonify({'hostels': [hostel.to_dict() for hostel in hostels]})
+        return jsonify({'hostels': [hostel.to_dict() for hostel in hostels]}),200
 
     @app.route('/api/rooms', methods=['GET'])
     def get_rooms():
         rooms = Room.query.all()
-        return jsonify({'rooms': [room.to_dict() for room in rooms]})
+        return jsonify({'rooms': [room.to_dict() for room in rooms]}),200
 
     @app.route('/api/bookings', methods=['GET'])
     def get_bookings():
         bookings = StudentRoomBooking.query.all()
-        return jsonify({'bookings': [booking.to_dict() for booking in bookings]})
+        return jsonify({'bookings': [booking.to_dict() for booking in bookings]}),200
 
     @app.route('/api/bookings', methods=['POST'])
     def create_booking():
