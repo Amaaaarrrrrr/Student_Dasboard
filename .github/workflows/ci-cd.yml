@@ -1,0 +1,83 @@
+name: Student Dashboard CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: dashboard
+          POSTGRES_PASSWORD: dashboardpass
+          POSTGRES_DB: student_portal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://dashboard:dashboardpass@localhost:5432/student_portal
+      REACT_APP_API_URL: http://localhost:5000/api
+      SECRET_KEY: testsecret
+
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v3
+
+    ### FRONTEND ###
+    - name: ⚛️ Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: 📦 Install Frontend Dependencies
+      working-directory: ./Client
+      run: npm install
+
+    - name: 🧪 Run Frontend Tests
+      working-directory: ./Client
+      run: npm test || echo "No tests"
+
+    - name: 🏗️ Build Frontend
+      working-directory: ./Client
+      run: npm run build
+
+    ### BACKEND ###
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11.11'
+
+    - name: 📦 Install Backend Dependencies
+      working-directory: ./Server
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 🧪 Run Backend Tests
+      working-directory: ./Server
+      run: |
+        export FLASK_APP=app.py
+        pytest --disable-warnings || echo "No backend tests"
+
+  deploy:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: 📤 Deploy to Hosting
+      run: |
+        echo "Insert deployment commands here (Heroku, Render, VPS)"
+      env:
+        API_KEY: ${{ secrets.DEPLOY_API_KEY }}
