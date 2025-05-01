@@ -68,6 +68,7 @@ jobs:
       working-directory: ./Server
       run: |
         export FLASK_APP=app.py
+        export DATABASE_URL=postgres://dashboard:dashboardpass@localhost:5432/student_portal  # Ensure Flask can read the environment variable
         pytest --disable-warnings || echo "No backend tests"
 
   deploy:
