@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify, request, jsonify
+from flask import Flask, request, jsonify, request
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_jwt_extended import (
@@ -9,8 +9,10 @@ from flask_jwt_extended import (
 from flask_cors import CORS
 from datetime import timedelta
 from functools import wraps
+from sqlalchemy.exc import SQLAlchemyError
 
-from models import db, User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration,Grade, Announcement, AuditLog, DocumentRequest
+from models import db, User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration,Grade, Announcement, AuditLog, DocumentRequest, Hostel, Room, StudentRoomBooking, FeeStructure, Payment, FeeClearance
+from dotenv import load_dotenv
 
 # Flask App Config
 app = Flask(__name__)
@@ -24,83 +26,13 @@ app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'super-secret-jw
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
 
 # Initialize Extensions
+load_dotenv()
 db.init_app(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)
 api = Api(app)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-
-# -------------------- JWT Error Handlers --------------------
-
-@jwt.unauthorized_loader
-def unauthorized_callback(callback):
-    return jsonify({"error": "Missing Authorization Header"}), 401
-@jwt.expired_token_loader
-def expired_token_callback(callback):
-    return jsonify({"error": "Token has expired"}), 401
-@jwt.invalid_token_loader
-def invalid_token_callback(callback):
-    return jsonify({"error": "Invalid token"}), 401
-@jwt.needs_fresh_token_loader
-def fresh_token_callback(callback):
-    return jsonify({"error": "Fresh token required"}), 401
-@jwt.revoked_token_loader
-def revoked_token_callback(callback):
-    return jsonify({"error": "Token has been revoked"}), 401
-@jwt.user_identity_loader
-def user_identity_lookup(user):
-    return user.id
-@jwt.user_claims_loader
-def add_claims_to_access_token(user):
-    return {
-        'role': user.role,
-        'name': user.name,
-        'email': user.email
-    }
-@jwt.user_loader_callback_loader
-def user_loader_callback(identity):
-    user = User.query.get(identity)
-    if not user:
-        return None
-    return user
-@jwt.token_in_blocklist_loader
-def check_if_token_revoked(jwt_header, jwt_payload):
-    jti = jwt_payload['jti']
-    token = TokenBlacklist.query.filter_by(jti=jti).first()
-    if token:
-        return True
-    return False
-# -------------------- Token Blacklist Model --------------------
-class TokenBlacklist(db.Model):
-    __tablename__ = 'token_blacklist'
-    id = db.Column(db.Integer, primary_key=True)
-    jti = db.Column(db.String(36), unique=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-
-    def __repr__(self):
-        return f"<TokenBlacklist {self.jti}>"
-# -------------------- Token Blacklist Resource --------------------
-class TokenBlacklistResource(Resource):
-    @jwt_required()
-    def post(self):
-        jti = get_jwt()['jti']
-        token = TokenBlacklist(jti=jti)
-        db.session.add(token)
-        db.session.commit()
-        return jsonify({"message": "Token blacklisted"}), 200
-
-    @jwt_required()
-    def delete(self):
-        jti = get_jwt()['jti']
-        token = TokenBlacklist.query.filter_by(jti=jti).first()
-        if not token:
-            return jsonify({"error": "Token not found"}), 404
-        db.session.delete(token)
-        db.session.commit()
-        return jsonify({"message": "Token removed from blacklist"}), 200
-# Register TokenBlacklistResource
-api.add_resource(TokenBlacklistResource, '/api/token_blacklist')
 
 
 # -------------------- Role-Based Access Decorator --------------------
@@ -460,238 +392,170 @@ def document_requests():
         db.session.commit()
         return jsonify({'message': 'Document request deleted successfully'})
     
-# -------------------- Run --------------------
-from sqlalchemy.exc import SQLAlchemyError
-from models import db, Hostel, Room, StudentRoomBooking, FeeStructure, Payment, ClearanceStatus
 
-def create_app():
-    app = Flask(__name__)
 
-    # Configurations
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
-        'DATABASE_URL',
-        "postgresql://dashboard:dashboardpass@localhost:5432/student_portal"
+# -------------------- Helper Functions --------------------
+def handle_db_commit(data_obj):
+    try:
+        db.session.add(data_obj)
+        db.session.commit()
+        return jsonify({'success': True, 'data': data_obj.to_dict()}), 201
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        print(f"Database error: {str(e)}")
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
+    except Exception as e:
+        db.session.rollback()
+        print(f"Unexpected error: {str(e)}")
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
+    
+# -------------------- Hostel and Room Management --------------------
+@app.route('/api/hostels', methods=['GET'])
+def get_hostels():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    hostels = Hostel.query.paginate(page, per_page, False)
+    return jsonify({
+        'hostels': [hostel.to_dict() for hostel in hostels.items],
+        'total': hostels.total,
+        'pages': hostels.pages,
+        'current_page': hostels.page
+    }), 200
+
+@app.route('/api/rooms', methods=['GET'])
+def get_rooms():
+    rooms = Room.query.all()
+    return jsonify({'rooms': [room.to_dict() for room in rooms]}), 200
+
+@app.route('/api/bookings', methods=['GET'])
+def get_bookings():
+    bookings = StudentRoomBooking.query.all()
+    return jsonify({'bookings': [booking.to_dict() for booking in bookings]}), 200
+
+@app.route('/api/bookings', methods=['POST'])
+def create_booking():
+    data = request.get_json()
+    room = Room.query.get(data['room_id'])
+    if not room or not room.is_available(data['start_date'], data['end_date']):
+        return jsonify({'error': 'Room not available for the selected dates'}), 400
+
+    booking = StudentRoomBooking(
+        student_id=data['student_id'],
+        room_id=data['room_id'],
+        start_date=data['start_date'],
+        end_date=data['end_date']
     )
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_updated_secret_key_here')
+    room.current_occupancy += 1
+    return handle_db_commit(booking)
 
-    db.init_app(app)
-    migrate = Migrate(app, db)
+@app.route('/api/bookings/<int:booking_id>', methods=['DELETE'])
+def cancel_booking(booking_id):
+    booking = StudentRoomBooking.query.get_or_404(booking_id)
+    room = Room.query.get(booking.room_id)
+    if room and room.current_occupancy > 0:
+        room.current_occupancy -= 1
 
-    # Routes
-    @app.route('/')
-    def home():
-        return """🎓✨ Welcome to the Student Portal! ✨🎓
+    db.session.delete(booking)
+    db.session.commit()
+    return jsonify({'message': 'Booking cancelled successfully'}), 200
 
-I’ve been working on building a Student Portal system that manages:
-✅ Fee structures
-✅ Student payments
-✅ Digital receipts
-✅ Hostel booking
-✅ Listing of vacant rooms/houses
+# -------------------- Fee Structure Management --------------------
+@app.route('/api/fee-structure', methods=['GET'])
+def get_fee_structure():
+    program_id = request.args.get('program_id')
+    semester_id = request.args.get('semester_id')
+    if not program_id or not semester_id:
+        return jsonify({'success': False, 'message': 'Missing required parameters'}), 400
 
-All powered by Python, Flask, and SQLAlchemy — designed to make student life smoother, more organized, and accessible online."""
+    fee_structure = FeeStructure.query.filter_by(program_id=program_id, semester_id=semester_id).first()
+    if fee_structure:
+        return jsonify({'success': True, 'data': fee_structure.to_dict()}), 200
+    else:
+        return jsonify({'success': False, 'message': 'Fee structure not found'}), 404
 
-    @app.route('/api/hostels', methods=['GET'])
-    def get_hostels():
-        hostels = Hostel.query.all()
-        return jsonify({'hostels': [hostel.to_dict() for hostel in hostels]}), 200
+@app.route('/api/fee-structure', methods=['POST'])
+def create_fee_structure():
+    data = request.get_json()
+    program_id = data.get('program_id')
+    semester_id = data.get('semester_id')
+    amount = data.get('amount')
+    due_date = data.get('due_date')
 
-    @app.route('/api/rooms', methods=['GET'])
-    def get_rooms():
-        rooms = Room.query.all()
-        return jsonify({'rooms': [room.to_dict() for room in rooms]}), 200
+    if not all([program_id, semester_id, amount, due_date]):
+        return jsonify({'success': False, 'message': 'Missing required fields'}), 400
 
-    @app.route('/api/bookings', methods=['GET'])
-    def get_bookings():
-        bookings = StudentRoomBooking.query.all()
-        return jsonify({'bookings': [booking.to_dict() for booking in bookings]}), 200
+    new_fee_structure = FeeStructure(
+        program_id=program_id,
+        semester_id=semester_id,
+        amount=amount,
+        due_date=due_date
+    )
+    return handle_db_commit(new_fee_structure)
 
-    @app.route('/api/bookings', methods=['POST'])
-    def create_booking():
-        data = request.get_json()
-        room = Room.query.get(data['room_id'])
-        if not room or not room.is_available():
-            return jsonify({'error': 'Room not available'}), 400
+@app.route('/api/fee-structures/all', methods=['GET'])
+def get_all_fee_structures():
+    fee_structures = FeeStructure.query.all()
+    return jsonify({'fee_structures': [fs.to_dict() for fs in fee_structures]}), 200
 
-        booking = StudentRoomBooking(
-            student_id=data['student_id'],
-            room_id=data['room_id'],
-            start_date=data['start_date'],
-            end_date=data['end_date']
-        )
-        room.current_occupancy += 1
-        db.session.add(booking)
-        db.session.commit()
-        return jsonify({'message': 'Booking created successfully', 'booking': booking.to_dict()}), 201
+# -------------------- Payment Handling --------------------
+@app.route('/api/payments', methods=['POST'])
+def create_payment():
+    data = request.get_json()
 
-    @app.route('/api/bookings/<int:booking_id>', methods=['DELETE'])
-    def cancel_booking(booking_id):
-        booking = StudentRoomBooking.query.get_or_404(booking_id)
-        room = Room.query.get(booking.room_id)
-        if room and room.current_occupancy > 0:
-            room.current_occupancy -= 1
+    student_id = data.get('student_id')
+    fee_structure_id = data.get('fee_structure_id')
+    amount_paid = data.get('amount_paid')
+    payment_method = data.get('payment_method')
+    receipt_number = data.get('receipt_number')
+    payment_status = data.get('payment_status')
+    remarks = data.get('remarks')
 
-        db.session.delete(booking)
-        db.session.commit()
-        return jsonify({'message': 'Booking cancelled successfully'}), 200
+    if not all([student_id, fee_structure_id, amount_paid, payment_method, receipt_number]):
+        return jsonify({'success': False, 'message': 'Missing required fields'}), 400
 
-    @app.route('/api/fee-structure/<int:program_id>/<int:semester_id>', methods=['GET'])
-    def get_fee_structure(program_id, semester_id):
-        try:
-            fee_structure = FeeStructure.query.filter_by(program_id=program_id, semester_id=semester_id).first()
-            if fee_structure:
-                return jsonify({'success': True, 'data': fee_structure.to_dict()}), 200
-            else:
-                return jsonify({'success': False, 'message': 'Fee structure not found'}), 404
-        except SQLAlchemyError as e:
-            print(f"Database error: {str(e)}")
-            return jsonify({'success': False, 'message': 'Internal server error'}), 500
+    new_payment = Payment(
+        student_id=student_id,
+        fee_structure_id=fee_structure_id,
+        amount_paid=amount_paid,
+        payment_method=payment_method,
+        receipt_number=receipt_number,
+        payment_status=payment_status,
+        remarks=remarks
+    )
+    return handle_db_commit(new_payment)
 
-    @app.route('/api/fee-structure', methods=['POST'])
-    def create_fee_structure():
-        try:
-            data = request.get_json()
+@app.route('/api/payments', methods=['GET'])
+def get_payments():
+    payments = Payment.query.all()
+    return jsonify({'payments': [payment.to_dict() for payment in payments]}), 200
 
-            # Extract values from request data
-            program_id = data.get('program_id')
-            semester_id = data.get('semester_id')
-            amount = data.get('amount')
-            due_date = data.get('due_date')
+# -------------------- Clearance Status --------------------
+@app.route('/api/clearance/<int:student_id>', methods=['GET'])
+def get_clearance_status(student_id):
+    clearance_status = FeeClearance.query.filter_by(student_id=student_id).first()
+    if clearance_status:
+        return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
+    else:
+        return jsonify({'success': False, 'message': 'Clearance status not found'}), 404
 
-            # Validate inputs
-            if not all([program_id, semester_id, amount, due_date]):
-                return jsonify({'success': False, 'message': 'Missing required fields'}), 400
+@app.route('/admin/clearance/<int:student_id>', methods=['PUT'])
+def update_clearance_status(student_id):
+    clearance_status = FeeClearance.query.filter_by(student_id=student_id).first()
+    if not clearance_status:
+        return jsonify({'success': False, 'message': 'Clearance status not found'}), 404
 
-            # Create a new FeeStructure object
-            new_fee_structure = FeeStructure(
-                program_id=program_id,
-                semester_id=semester_id,
-                amount=amount,
-                due_date=due_date
-            )
+    data = request.get_json()
 
-            # Add to session and commit to the database
-            db.session.add(new_fee_structure)
-            db.session.commit()
+    clearance_status.hostel_clearance = data.get('hostel_clearance', clearance_status.hostel_clearance)
+    clearance_status.fee_clearance = data.get('fee_clearance', clearance_status.fee_clearance)
+    clearance_status.library_clearance = data.get('library_clearance', clearance_status.library_clearance)
+    clearance_status.sports_clearance = data.get('sports_clearance', clearance_status.sports_clearance)
+    clearance_status.lab_clearance = data.get('lab_clearance', clearance_status.lab_clearance)
+    clearance_status.status = data.get('status', clearance_status.status)
+    clearance_status.remarks = data.get('remarks', clearance_status.remarks)
 
-            return jsonify({'success': True, 'data': new_fee_structure.to_dict()}), 201
-
-        except SQLAlchemyError as e:
-            # Rollback in case of error
-            db.session.rollback()
-            print(f"Database error: {str(e)}")
-            return jsonify({'success': False, 'message': 'Internal server error'}), 500
-        except Exception as e:
-            db.session.rollback()
-            print(f"Unexpected error: {str(e)}")
-            return jsonify({'success': False, 'message': 'Internal server error'}), 500
-
-    @app.route('/api/fee-structures/all', methods=['GET'])
-    def get_all_fee_structures():
-        fee_structures = FeeStructure.query.all()
-        fee_structure_list = [fs.to_dict() for fs in fee_structures]
-        return jsonify({'fee_structures': fee_structure_list}), 200
-
-    @app.route('/api/payments', methods=['POST'])
-    def create_payment():
-        try:
-            data = request.get_json()
-
-            # Extract values from request data
-            student_id = data.get('student_id')
-            fee_structure_id = data.get('fee_structure_id')
-            amount_paid = data.get('amount_paid')
-            payment_method = data.get('payment_method')
-            receipt_number = data.get('receipt_number')
-            payment_status = data.get('payment_status')
-            remarks = data.get('remarks')
-
-            # Validate inputs
-            if not all([student_id, fee_structure_id, amount_paid, payment_method, receipt_number]):
-                return jsonify({'success': False, 'message': 'Missing required fields'}), 400
-
-            # Create a new Payment object
-            new_payment = Payment(
-                student_id=student_id,
-                fee_structure_id=fee_structure_id,
-                amount_paid=amount_paid,
-                payment_method=payment_method,
-                receipt_number=receipt_number,
-                payment_status=payment_status,
-                remarks=remarks
-            )
-
-            # Add to session and commit to the database
-            db.session.add(new_payment)
-            db.session.commit()
-
-            return jsonify({'success': True, 'data': new_payment.to_dict()}), 201
-
-        except SQLAlchemyError as e:
-            # Rollback in case of error
-            db.session.rollback()
-            print(f"Database error: {str(e)}")
-            return jsonify({'success': False, 'message': 'Internal server error'}), 500
-        except Exception as e:
-            db.session.rollback()
-            print(f"Unexpected error: {str(e)}")
-            return jsonify({'success': False, 'message': 'Internal server error'}), 500
-
-    @app.route('/api/payments', methods=['GET'])
-    def get_payments():
-        payments = Payment.query.all()
-        payment_list = [payment.to_dict() for payment in payments]
-        return jsonify({'payments': payment_list}), 200
-
-    @app.route('/api/clearance/<int:student_id>', methods=['GET'])
-    def get_clearance_status(student_id):
-        try:
-            clearance_status = ClearanceStatus.query.filter_by(student_id=student_id).first()
-            if clearance_status:
-                return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
-            else:
-                return jsonify({'success': False, 'message': 'Clearance status not found'}), 404
-        except SQLAlchemyError as e:
-            print(f"Database error: {str(e)}")
-            return jsonify({'success': False, 'message': 'Internal server error'}), 500
-  
-    @app.route('/admin/clearance/<int:student_id>', methods=['PUT'])
-    def update_clearance_status(student_id):
-        try:
-            clearance_status = ClearanceStatus.query.filter_by(student_id=student_id).first()
-            if not clearance_status:
-                return jsonify({'success': False, 'message': 'Clearance status not found'}), 404
-
-            data = request.get_json()
-
-            # Update clearance fields
-            clearance_status.hostel_clearance = data.get('hostel_clearance', clearance_status.hostel_clearance)
-            clearance_status.fee_clearance = data.get('fee_clearance', clearance_status.fee_clearance)
-            clearance_status.library_clearance = data.get('library_clearance', clearance_status.library_clearance)
-            clearance_status.sports_clearance = data.get('sports_clearance', clearance_status.sports_clearance)
-            clearance_status.lab_clearance = data.get('lab_clearance', clearance_status.lab_clearance)
-            clearance_status.status = data.get('status', clearance_status.status)
-            clearance_status.remarks = data.get('remarks', clearance_status.remarks)
-
-            db.session.commit()
-
-            return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
-
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            print(f"Database error: {str(e)}")
-            return jsonify({'success': False, 'message': 'Internal server error'}), 500
-        except Exception as e:
-            db.session.rollback()
-            print(f"Unexpected error: {str(e)}")
-            return jsonify({'success': False, 'message': 'Internal server error'}), 500
-        
-        
-
-    return app
-
-app = create_app()
+    db.session.commit()
+    return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
 
 if __name__ == "__main__":
     app.run(debug=True)
