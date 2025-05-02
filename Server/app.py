@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
-    "postgresql://dashboard:dashboardpass@localhost:5432/student_portal"
+    "postgresql://dashboard:Student@localhost:5432/student_portal"
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_updated_secret_key_here')
