@@ -31,7 +31,9 @@ jwt = JWTManager(app)
 api = Api(app)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+
 # -------------------- JWT Error Handlers --------------------
+
 @jwt.unauthorized_loader
 def unauthorized_callback(callback):
     return jsonify({"error": "Missing Authorization Header"}), 401
@@ -312,9 +314,15 @@ api.add_resource(AdminDashboard, '/api/admin_dashboard')
 @app.route('/api/grades', methods=['GET', 'POST'])
 @jwt_required()
 def grades():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
     if request.method == 'GET':
-        student_id = get_jwt_identity()
-        grades = Grade.query.filter_by(student_id=student_id).all()
+        # Only allow students to view their grades
+        if current_user.role != 'student':
+            return jsonify({'error': 'Permission denied'}), 403
+
+        grades = Grade.query.filter_by(student_id=current_user_id).all()
         return jsonify([{
             'course_code': g.course.code,
             'course_title': g.course.title,
@@ -324,19 +332,51 @@ def grades():
         } for g in grades])
 
     elif request.method == 'POST':
+        # Only allow lecturers to post grades
+        if current_user.role != 'lecturer':
+            return jsonify({'error': 'Permission denied'}), 403
+
         data = request.get_json()
         student_id = data.get('student_id')
         course_id = data.get('course_id')
         grade = data.get('grade')
         semester_id = data.get('semester_id')
 
+        # Validate required fields
         if not all([student_id, course_id, grade, semester_id]):
             return jsonify({'error': 'Missing required fields'}), 400
 
+        # Check if the course and semester exist
+        course = Course.query.get(course_id)
+        semester = Semester.query.get(semester_id)
+
+        if not course or not semester:
+            return jsonify({'error': 'Invalid course or semester'}), 404
+
+        # Create and save the grade entry
         grade_entry = Grade(student_id=student_id, course_id=course_id, grade=grade, semester_id=semester_id)
         db.session.add(grade_entry)
         db.session.commit()
+
         return jsonify({'message': 'Grade added successfully'}), 201
+    elif request.method == 'DELETE':    
+        # Only allow lecturers to delete grades
+        if current_user.role != 'lecturer':
+            return jsonify({'error': 'Permission denied'}), 403
+
+        data = request.get_json()
+        grade_id = data.get('grade_id')
+
+        if not grade_id:
+            return jsonify({'error': 'Grade ID is required'}), 400
+
+        grade_entry = Grade.query.filter_by(id=grade_id).first()
+        if not grade_entry:
+            return jsonify({'error': 'Grade not found'}), 404
+
+        db.session.delete(grade_entry)
+        db.session.commit()
+        return jsonify({'message': 'Grade deleted successfully'})
 
 # -------------------- Announcements Resource --------------------
 @app.route('/api/announcements', methods=['GET', 'POST'])
