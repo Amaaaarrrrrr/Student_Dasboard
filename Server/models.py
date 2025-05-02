@@ -120,8 +120,7 @@ class AdminProfile(db.Model, SerializerMixin):
             'office': self.office,
             'phone': self.phone
         }
- from datetime import datetime
-from flask_sqlalchemy import SQLAlchemy
+
 
 db = SQLAlchemy()
 
