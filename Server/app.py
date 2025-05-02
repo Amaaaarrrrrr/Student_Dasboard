@@ -5,9 +5,9 @@ from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_jwt_extended import (
     JWTManager, create_access_token,
-    jwt_required, get_jwt_identity
+    jwt_required, get_jwt_identity, get_jwt
 )
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask_cors import CORS
 from datetime import timedelta
 from functools import wraps
 
@@ -29,6 +29,77 @@ db.init_app(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)
 api = Api(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+# -------------------- JWT Error Handlers --------------------
+@jwt.unauthorized_loader
+def unauthorized_callback(callback):
+    return jsonify({"error": "Missing Authorization Header"}), 401
+@jwt.expired_token_loader
+def expired_token_callback(callback):
+    return jsonify({"error": "Token has expired"}), 401
+@jwt.invalid_token_loader
+def invalid_token_callback(callback):
+    return jsonify({"error": "Invalid token"}), 401
+@jwt.needs_fresh_token_loader
+def fresh_token_callback(callback):
+    return jsonify({"error": "Fresh token required"}), 401
+@jwt.revoked_token_loader
+def revoked_token_callback(callback):
+    return jsonify({"error": "Token has been revoked"}), 401
+@jwt.user_identity_loader
+def user_identity_lookup(user):
+    return user.id
+@jwt.user_claims_loader
+def add_claims_to_access_token(user):
+    return {
+        'role': user.role,
+        'name': user.name,
+        'email': user.email
+    }
+@jwt.user_loader_callback_loader
+def user_loader_callback(identity):
+    user = User.query.get(identity)
+    if not user:
+        return None
+    return user
+@jwt.token_in_blocklist_loader
+def check_if_token_revoked(jwt_header, jwt_payload):
+    jti = jwt_payload['jti']
+    token = TokenBlacklist.query.filter_by(jti=jti).first()
+    if token:
+        return True
+    return False
+# -------------------- Token Blacklist Model --------------------
+class TokenBlacklist(db.Model):
+    __tablename__ = 'token_blacklist'
+    id = db.Column(db.Integer, primary_key=True)
+    jti = db.Column(db.String(36), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    def __repr__(self):
+        return f"<TokenBlacklist {self.jti}>"
+# -------------------- Token Blacklist Resource --------------------
+class TokenBlacklistResource(Resource):
+    @jwt_required()
+    def post(self):
+        jti = get_jwt()['jti']
+        token = TokenBlacklist(jti=jti)
+        db.session.add(token)
+        db.session.commit()
+        return jsonify({"message": "Token blacklisted"}), 200
+
+    @jwt_required()
+    def delete(self):
+        jti = get_jwt()['jti']
+        token = TokenBlacklist.query.filter_by(jti=jti).first()
+        if not token:
+            return jsonify({"error": "Token not found"}), 404
+        db.session.delete(token)
+        db.session.commit()
+        return jsonify({"message": "Token removed from blacklist"}), 200
+# Register TokenBlacklistResource
+api.add_resource(TokenBlacklistResource, '/api/token_blacklist')
 
 
 # -------------------- Role-Based Access Decorator --------------------
