@@ -25,10 +25,9 @@ class Course(db.Model):
     prerequisites = db.relationship('Course',
                                     secondary='course_prerequisites',
                                     primaryjoin='Course.id==CoursePrerequisite.course_id',
-                                    secondaryjoin='Course.id==CoursePrerequisite.prerequisite_id',
-                                    backref='required_for')
+                                    secondaryjoin='Course.id==CoursePrerequisite.prerequisite_id')
 
-    semester = db.relationship('Semester', backref='courses')
+    semester = db.relationship('Semester')
 
     def __repr__(self):
         return f"<Course {self.code} - {self.title}>"
@@ -47,8 +46,8 @@ class UnitRegistration(db.Model):
     semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id'), nullable=False)
     registered_on = db.Column(db.DateTime, default=datetime.utcnow)
 
-    course = db.relationship('Course', backref='registrations')
-    semester = db.relationship('Semester', backref='registrations')
+    course = db.relationship('Course')
+    semester = db.relationship('Semester')
 
     def __repr__(self):
         return f"<UnitRegistration student:{self.student_id} course:{self.course_id} semester:{self.semester_id}>"
