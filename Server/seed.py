@@ -1,5 +1,5 @@
 from app import app, db
-from models import Hostel, Room, StudentRoomBooking
+from models import Hostel, Room, StudentRoomBooking, FeeStructure, Payment, ClearanceStatus
 from datetime import datetime, timedelta
 import random
 
@@ -9,6 +9,9 @@ def seed():
         StudentRoomBooking.query.delete()
         Room.query.delete()
         Hostel.query.delete()
+        FeeStructure.query.delete()
+        Payment.query.delete()
+        ClearanceStatus.query.delete()
 
         # Seed Hostels
         hostel_names = [
@@ -78,7 +81,60 @@ def seed():
 
         db.session.commit()
         print(f'Seeded {len(bookings)} bookings.')
+        
+        # Seed Fee Structures
+        fee_structures = []
+        for program_id in range(1, 6):  # Example: 5 different programs
+            for semester_id in range(1, 3):  # Example: 2 semesters
+                fee_structure = FeeStructure(
+                    program_id=program_id,
+                    semester_id=semester_id,
+                    amount=random.randint(5000, 15000),
+                    due_date=datetime.utcnow() + timedelta(days=30)
+                )
+                db.session.add(fee_structure)
+                fee_structures.append(fee_structure)
+
+        db.session.commit()
+        print(f'Seeded {len(fee_structures)} fee structures.')
+
+        # Seed Payments
+        payments = []
+        for i in range(50):  # 50 random payments
+            fee_structure = random.choice(fee_structures)
+            payment = Payment(
+                student_id=random.randint(1, 50),
+                fee_structure_id=fee_structure.id,
+                amount_paid=random.randint(1000, fee_structure.amount),
+                payment_date=datetime.utcnow(),
+                payment_method=random.choice(['credit_card', 'debit_card', 'Mpesa']),
+                receipt_number=f'TXN{random.randint(100000, 999999)}',
+                payment_status=random.choice(['success', 'pending'])
+            )
+            db.session.add(payment)
+            payments.append(payment)
+
+        db.session.commit()
+        print(f'Seeded {len(payments)} payments.')
+
+        # Seed Clearance Statuses
+        clearance_statuses = []
+        for student_id in range(1, 51):  # For each student
+            clearance_status = ClearanceStatus(
+                student_id=student_id,
+                hostel_clearance=random.choice([True, False]),
+                fee_clearance=random.choice([True, False]),
+                library_clearance=random.choice([True, False]),
+                lab_clearance=random.choice([True, False]),
+                status=random.choice(['pending', 'approved', 'rejected'])
+            )
+            db.session.add(clearance_status)
+            clearance_statuses.append(clearance_status)
+
+        db.session.commit()
+        print(f'Seeded {len(clearance_statuses)} clearance statuses.')
 
 if __name__ == '__main__':
-    seed()
-    print("Seeding completed successfully...!.")
+    with app.app_context():
+        seed()
+        print("Seeding completed successfully!")
