@@ -208,8 +208,7 @@ All powered by Python, Flask, and SQLAlchemy — designed to make student life s
             # Update clearance fields
             clearance_status.hostel_clearance = data.get('hostel_clearance', clearance_status.hostel_clearance)
             clearance_status.fee_clearance = data.get('fee_clearance', clearance_status.fee_clearance)
-            clearance_status.library_clearance = data.get('library_clearance', clearance_status.library_clearance)
-            clearance_status.sports_clearance = data.get('sports_clearance', clearance_status.sports_clearance)
+            clearance_status.library_clearance = data.get('library_clearance', clearance_status.library_clearance)           
             clearance_status.lab_clearance = data.get('lab_clearance', clearance_status.lab_clearance)
             clearance_status.status = data.get('status', clearance_status.status)
             clearance_status.remarks = data.get('remarks', clearance_status.remarks)
@@ -226,7 +225,6 @@ All powered by Python, Flask, and SQLAlchemy — designed to make student life s
             db.session.rollback()
             print(f"Unexpected error: {str(e)}")
             return jsonify({'success': False, 'message': 'Internal server error'}), 500
-        
         
 
     return app
