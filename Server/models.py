@@ -27,9 +27,20 @@ class User(db.Model, SerializerMixin):
         backref='user',
         cascade='all, delete-orphan'
     )
+    admin_profile = db.relationship(
+        'AdminProfile',
+        uselist=False,
+        backref='user',
+        cascade='all, delete-orphan'
+    )
 
-    # Exclude password_hash from serialization
-    serialize_rules = ('-password_hash', '-student_profile.user', '-lecturer_profile.user')
+    # Exclude password_hash and profile backrefs from serialization
+    serialize_rules = (
+        '-password_hash',
+        '-student_profile.user',
+        '-lecturer_profile.user',
+        '-admin_profile.user'
+    )
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -38,10 +49,6 @@ class User(db.Model, SerializerMixin):
         return check_password_hash(self.password_hash, password)
 
     def to_dict(self):
-        """
-        Convert the User object to a dictionary.
-        Used for serializing the User object to JSON format.
-        """
         return {
             'id': self.id,
             'name': self.name,
@@ -49,7 +56,8 @@ class User(db.Model, SerializerMixin):
             'role': self.role,
             'created_at': self.created_at,
             'student_profile': self.student_profile.to_dict() if self.student_profile else None,
-            'lecturer_profile': self.lecturer_profile.to_dict() if self.lecturer_profile else None
+            'lecturer_profile': self.lecturer_profile.to_dict() if self.lecturer_profile else None,
+            'admin_profile': self.admin_profile.to_dict() if self.admin_profile else None
         }
 
 
@@ -93,3 +101,23 @@ class LecturerProfile(db.Model, SerializerMixin):
             'department': self.department,
             'phone': self.phone
         }
+
+
+class AdminProfile(db.Model, SerializerMixin):
+    __tablename__ = 'admin_profiles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=False)
+    staff_id = db.Column(db.String(50), nullable=False)
+    office = db.Column(db.String(100), nullable=True)
+    phone = db.Column(db.String(20))
+
+    serialize_rules = ('-user.admin_profile',)
+
+    def to_dict(self):
+        return {
+            'staff_id': self.staff_id,
+            'office': self.office,
+            'phone': self.phone
+        }
+ 
