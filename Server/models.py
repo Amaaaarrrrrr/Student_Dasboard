@@ -2,8 +2,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy_serializer import SerializerMixin
-import sqlalchemy as sa
 db = SQLAlchemy()
 
 # -------------------- User Model --------------------

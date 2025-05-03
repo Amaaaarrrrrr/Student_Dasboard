@@ -4,7 +4,7 @@ from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_jwt_extended import (
     JWTManager, create_access_token,
-    jwt_required, get_jwt_identity, get_jwt
+    jwt_required, get_jwt_identity
 )
 from flask_cors import CORS
 from datetime import timedelta
@@ -54,6 +54,7 @@ def role_required(role):
 
 # -------------------- Auth Resources --------------------
 class Register(Resource):
+   
     def post(self):
         data = request.get_json()
         name = data.get('name')
@@ -97,6 +98,7 @@ class Register(Resource):
         return {"message": "User registered successfully"}, 201
 
 class Login(Resource):
+   
     def post(self):
         data = request.get_json()
         email = data.get('email')
@@ -121,6 +123,7 @@ class Login(Resource):
         }, 200
 
 class Profile(Resource):
+    
     @jwt_required()
     def get(self):
         user = User.query.get(get_jwt_identity())
@@ -134,6 +137,11 @@ class AdminDashboard(Resource):
     def get(self):
         return {"message": "Welcome to the Admin Dashboard!"}, 200
 
+# -------------------- Resource Routes --------------------
+api.add_resource(Register, '/api/register')
+api.add_resource(Login, '/api/login')
+api.add_resource(Profile, '/api/profile')
+api.add_resource(AdminDashboard, '/api/admin_dashboard')
 # -------------------- API Endpoints --------------------
 @app.route('/')
 def home():
@@ -235,11 +243,7 @@ def registration():
         db.session.commit()
         return jsonify({'message': 'Deregistration successful'})
 
-# -------------------- Resource Routes --------------------
-api.add_resource(Register, '/api/register')
-api.add_resource(Login, '/api/login')
-api.add_resource(Profile, '/api/profile')
-api.add_resource(AdminDashboard, '/api/admin_dashboard')
+
 
 # -------------------- Grades Resource --------------------
 @app.route('/api/grades', methods=['GET', 'POST'])
