@@ -54,49 +54,55 @@ def role_required(role):
 
 # -------------------- Auth Resources --------------------
 class Register(Resource):
-   
     def post(self):
-        data = request.get_json()
-        name = data.get('name')
-        email = data.get('email')
-        password = data.get('password')
-        role = data.get('role')
+        try:
+            data = request.get_json()
+            name = data.get('name')
+            email = data.get('email')
+            password = data.get('password')
+            role = data.get('role')
 
-        if not all([name, email, password, role]):
-            return {"error": "Missing required fields"}, 400
-        if role not in ['student', 'lecturer', 'admin']:
-            return {"error": "Invalid role"}, 400
-        if User.query.filter_by(email=email).first():
-            return {"error": "Email already registered"}, 409
+            if not all([name, email, password, role]):
+                return {"error": "Missing required fields"}, 400
 
-        user = User(name=name, email=email, role=role)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.flush()
+            if User.query.filter_by(email=email).first():
+                return {"error": "Email already registered"}, 409
 
-        profile_data = data.get(f"{role}_profile", {})
+            user = User(name=name, email=email, role=role)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.flush()
 
-        if role == 'student':
-            student_profile = StudentProfile(
-                user_id=user.id,
-                reg_no=profile_data.get('reg_no'),
-                program=profile_data.get('program'),
-                year_of_study=profile_data.get('year_of_study'),
-                phone=profile_data.get('phone')
-            )
-            db.session.add(student_profile)
-        elif role == 'lecturer':
-            lecturer_profile = LecturerProfile(
-                user_id=user.id,
-                staff_no=profile_data.get('staff_no'),
-                department=profile_data.get('department'),
-                phone=profile_data.get('phone')
-            )
-            db.session.add(lecturer_profile)
+            profile_data = data.get(f"{role}_profile", {})
+            if role == 'student':
+                student_profile = StudentProfile(
+                    user_id=user.id,
+                    reg_no=profile_data.get('reg_no'),
+                    program=profile_data.get('program'),
+                    year_of_study=profile_data.get('year_of_study'),
+                    phone=profile_data.get('phone')
+                )
+                db.session.add(student_profile)
+                db.session.commit()  
+                print(f"Student profile created with ID: {student_profile.id}")
+            elif role == 'lecturer':
+                lecturer_profile = LecturerProfile(
+                    user_id=user.id,
+                    staff_no=profile_data.get('staff_no'),
+                    department=profile_data.get('department'),
+                    phone=profile_data.get('phone')
+                )
+                db.session.add(lecturer_profile)
 
-        db.session.commit()
-        return {"message": "User registered successfully"}, 201
-
+            db.session.commit()
+            return {"message": "User registered successfully"}, 201
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            print(f"Database error: {str(e)}")
+            return {"error": "Internal server error"}, 500
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
+            return {"error": "Internal server error"}, 500
 class Login(Resource):
    
     def post(self):
@@ -185,41 +191,40 @@ def get_active_semester():
 @app.route('/api/registration', methods=['GET', 'POST', 'DELETE'])
 @jwt_required()
 def registration():
-    student_id = request.args.get('student_id') or request.get_json(silent=True, force=True).get('student_id')
-    if not student_id:
-        return jsonify({'error': 'student_id is required'}), 400
+    # Get the current user's ID from the JWT token
+    current_user_id = get_jwt_identity()
 
-    if request.method == 'GET':
-        registrations = UnitRegistration.query.filter_by(student_id=student_id).all()
-        return jsonify([{
-            'id': reg.id,
-            'student_id': reg.student_id,
-            'course_id': reg.course_id,
-            'course_code': reg.course.code,
-            'course_title': reg.course.title,
-            'semester_id': reg.semester_id,
-            'registered_on': reg.registered_on.isoformat()
-        } for reg in registrations])
+    # Ensure the current user has a student profile
+    student_profile = StudentProfile.query.filter_by(user_id=current_user_id).first()
+    if not student_profile:
+        return jsonify({'error': 'Student profile not found'}), 404
 
-    elif request.method == 'POST':
+    if request.method == 'POST':
         data = request.get_json()
-        course_id = data.get('course_id')
+        course_code = data.get('course_code')  # Expecting course_code instead of course_id
         semester_id = data.get('semester_id')
 
-        if not all([student_id, course_id, semester_id]):
-            return jsonify({'error': 'student_id, course_id, and semester_id are required'}), 400
+        if not all([course_code, semester_id]):
+            return jsonify({'error': 'course_code and semester_id are required'}), 400
 
-        if UnitRegistration.is_already_registered(student_id, course_id, semester_id):
-            return jsonify({'error': 'Already registered for this course in the semester'}), 400
-
-        course = Course.query.get(course_id)
+        # Resolve course_id from course_code
+        course = Course.query.filter_by(code=course_code).first()
         if not course:
             return jsonify({'error': 'Course not found'}), 404
-        if not UnitRegistration.check_prerequisites_met(student_id, course):
+
+        course_id = course.id
+
+        # Check if already registered
+        if UnitRegistration.query.filter_by(student_id=student_profile.id, course_id=course_id, semester_id=semester_id).first():
+            return jsonify({'error': 'Already registered for this course in the semester'}), 400
+
+        # Check prerequisites
+        if not UnitRegistration.check_prerequisites_met(student_profile.id, course):
             return jsonify({'error': 'Prerequisites not met'}), 400
 
+        # Create the registration
         registration = UnitRegistration(
-            student_id=student_id,
+            student_id=student_profile.id,  # Use the student_profile.id here
             course_id=course_id,
             semester_id=semester_id
         )
@@ -228,23 +233,31 @@ def registration():
 
         return jsonify({'message': 'Registration successful', 'registration_id': registration.id}), 201
 
+    elif request.method == 'GET':
+        # Fetch all registrations for the current student
+        registrations = UnitRegistration.query.filter_by(student_id=student_profile.id).all()
+        return jsonify([{
+            'id': reg.id,
+            'course_code': reg.course.code,
+            'course_title': reg.course.title,
+            'semester_id': reg.semester_id,
+            'registered_on': reg.registered_on.isoformat()
+        } for reg in registrations]), 200
+
     elif request.method == 'DELETE':
         data = request.get_json()
         registration_id = data.get('registration_id')
 
         if not registration_id:
-            return jsonify({'error': 'registration_id is required'}), 400
+            return jsonify({'error': 'Registration ID is required'}), 400
 
-        registration = UnitRegistration.query.filter_by(id=registration_id, student_id=student_id).first()
+        registration = UnitRegistration.query.filter_by(id=registration_id, student_id=student_profile.id).first()
         if not registration:
             return jsonify({'error': 'Registration not found'}), 404
 
         db.session.delete(registration)
         db.session.commit()
-        return jsonify({'message': 'Deregistration successful'})
-
-
-
+        return jsonify({'message': 'Registration deleted successfully'}), 200
 # -------------------- Grades Resource --------------------
 @app.route('/api/grades', methods=['GET', 'POST'])
 @jwt_required()

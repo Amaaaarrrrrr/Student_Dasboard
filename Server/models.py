@@ -12,7 +12,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(50), nullable=False)
 
     student_profile = db.relationship('StudentProfile', back_populates='user', uselist=False)
@@ -31,10 +31,23 @@ class User(db.Model):
         return check_password_hash(self.password_hash, password)
 
     def to_dict(self, rules=()):
-        rules = rules or self.serialize_rules
-        user_dict = {field: getattr(self, field) for field in rules}
-        return user_dict
+        # Handle exclusion rules (fields prefixed with '-')
+        exclude_fields = {rule[1:] for rule in rules if rule.startswith('-')}
+        include_fields = {rule for rule in rules if not rule.startswith('-')}
 
+        # Build the dictionary
+        user_dict = {}
+        for field in self.__table__.columns.keys():
+            if field not in exclude_fields:
+                user_dict[field] = getattr(self, field)
+
+        # Add relationships if explicitly included
+        if 'student_profile' in include_fields and hasattr(self, 'student_profile'):
+            user_dict['student_profile'] = self.student_profile.to_dict() if self.student_profile else None
+        if 'lecturer_profile' in include_fields and hasattr(self, 'lecturer_profile'):
+            user_dict['lecturer_profile'] = self.lecturer_profile.to_dict() if self.lecturer_profile else None
+
+        return user_dict
 
 # -------------------- StudentProfile Model --------------------
 
