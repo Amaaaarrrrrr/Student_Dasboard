@@ -18,6 +18,7 @@ class User(db.Model):
     role = db.Column(db.String(50), nullable=False)
 
     student_profile = db.relationship('StudentProfile', back_populates='user', uselist=False)
+    grades = db.relationship('Grade', back_populates='student')
     lecturer_profile = db.relationship('LecturerProfile', back_populates='user', uselist=False)
     announcements = db.relationship('Announcement', back_populates='posted_by')
     audit_logs = db.relationship('AuditLog', back_populates='user')
@@ -94,6 +95,8 @@ class Course(db.Model):
     description = db.Column(db.String(200))
     semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id'), nullable=False)
     program = db.Column(db.String(50), nullable=False)
+    grades = db.relationship('Grade', back_populates='course')
+
 
     semester = db.relationship('Semester', back_populates='courses')
     unit_registrations = db.relationship('UnitRegistration', back_populates='course')
@@ -111,6 +114,7 @@ class Course(db.Model):
         secondaryjoin='Course.id==course_prerequisites.c.course_id',
         back_populates='prerequisites'
     )
+   
 
     serialize_rules = ('id', 'code', 'title', 'description', 'semester_id', 'program')
 
@@ -131,7 +135,9 @@ class Semester(db.Model):
     active = db.Column(db.Boolean, default=False)
 
     courses = db.relationship('Course', back_populates='semester')
+    grades = db.relationship('Grade', back_populates='semester')
     unit_registrations = db.relationship('UnitRegistration', back_populates='semester')
+
 
     serialize_rules = ('id', 'name', 'start_date', 'end_date', 'active')
 
@@ -211,10 +217,10 @@ course_prerequisites = db.Table(
 
 class Grade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
     grade = db.Column(db.String(2), nullable=False)
-    semester_id = db.Column(db.Integer, db.ForeignKey('semester.id'), nullable=False)
+    semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id'), nullable=False)
     date_posted = db.Column(db.DateTime, default=datetime.utcnow)
 
     student = db.relationship('User', back_populates='grades')
@@ -238,7 +244,7 @@ class Announcement(db.Model):
     title = db.Column(db.String(255), nullable=False)
     content = db.Column(db.Text, nullable=False)
     date_posted = db.Column(db.DateTime, default=datetime.utcnow)
-    posted_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    posted_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     posted_by = db.relationship('User', back_populates='announcements')
 
@@ -257,7 +263,7 @@ class AuditLog(db.Model):
     action = db.Column(db.String(255), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     details = db.Column(db.Text)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     user = db.relationship('User', back_populates='audit_logs')
 
@@ -273,7 +279,7 @@ class AuditLog(db.Model):
 
 class DocumentRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     document_type = db.Column(db.String(255), nullable=False)
     status = db.Column(db.String(50), default='Pending')
     requested_on = db.Column(db.DateTime, default=datetime.utcnow)

@@ -10,7 +10,7 @@ from flask_cors import CORS
 from datetime import timedelta
 from functools import wraps
 from sqlalchemy.exc import SQLAlchemyError
-
+from datetime import datetime
 from models import db, User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration,Grade, Announcement, AuditLog, DocumentRequest, Hostel, Room, StudentRoomBooking, FeeStructure, Payment, FeeClearance
 from dotenv import load_dotenv
 
@@ -545,17 +545,20 @@ def update_clearance_status(student_id):
         return jsonify({'success': False, 'message': 'Clearance status not found'}), 404
 
     data = request.get_json()
-
-    clearance_status.hostel_clearance = data.get('hostel_clearance', clearance_status.hostel_clearance)
-    clearance_status.fee_clearance = data.get('fee_clearance', clearance_status.fee_clearance)
-    clearance_status.library_clearance = data.get('library_clearance', clearance_status.library_clearance)
-    clearance_status.sports_clearance = data.get('sports_clearance', clearance_status.sports_clearance)
-    clearance_status.lab_clearance = data.get('lab_clearance', clearance_status.lab_clearance)
-    clearance_status.status = data.get('status', clearance_status.status)
-    clearance_status.remarks = data.get('remarks', clearance_status.remarks)
+    
+    # Only update what's in the model
+    if 'status' in data:
+        clearance_status.status = data['status']
+    
+    if 'cleared_on' in data:
+        try:
+            clearance_status.cleared_on = datetime.fromisoformat(data['cleared_on'])
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format'}), 400
 
     db.session.commit()
     return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
+
 
 if __name__ == "__main__":
     app.run(debug=True)
