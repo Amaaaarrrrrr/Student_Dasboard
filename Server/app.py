@@ -373,8 +373,8 @@ def audit_logs():
 @jwt_required()
 def document_requests():
     if request.method == 'GET':
-        student_id = get_jwt_identity()
-        requests = DocumentRequest.query.filter_by(student_id=student_id).all()
+        current_user_id = get_jwt_identity()
+        requests = DocumentRequest.query.filter_by(student_id=current_user_id).all()
         return jsonify([{
             'document_type': req.document_type,
             'status': req.status,
@@ -431,7 +431,7 @@ def handle_db_commit(data_obj):
 def get_hostels():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
-    hostels = Hostel.query.paginate(page, per_page, False)
+    hostels = Hostel.query.paginate(page=page, per_page=per_page, error_out=False)
     return jsonify({
         'hostels': [hostel.to_dict() for hostel in hostels.items],
         'total': hostels.total,
@@ -446,7 +446,9 @@ def get_rooms():
 
 @app.route('/api/bookings', methods=['GET'])
 def get_bookings():
-    bookings = StudentRoomBooking.query.all()
+
+    current_user_id = get_jwt_identity()
+    bookings = StudentRoomBooking.query.filter_by(student_id=current_user_id).all()
     return jsonify({'bookings': [booking.to_dict() for booking in bookings]}), 200
 
 @app.route('/api/bookings', methods=['POST'])
@@ -515,41 +517,61 @@ def get_all_fee_structures():
     return jsonify({'fee_structures': [fs.to_dict() for fs in fee_structures]}), 200
 
 # -------------------- Payment Handling --------------------
-@app.route('/api/payments', methods=['POST'])
-def create_payment():
-    data = request.get_json()
+@app.route('/api/payments', methods=['GET', 'POST'])
+@jwt_required()
+def payments():
+    current_user_id = get_jwt_identity()
 
-    student_id = data.get('student_id')
-    fee_structure_id = data.get('fee_structure_id')
-    amount_paid = data.get('amount_paid')
-    payment_method = data.get('payment_method')
-    receipt_number = data.get('receipt_number')
-    payment_status = data.get('payment_status')
-    remarks = data.get('remarks')
+    if request.method == 'GET':
+        # Fetch all payments for the current student
+        payments = Payment.query.filter_by(student_id=current_user_id).all()
+        return jsonify({'payments': [payment.to_dict() for payment in payments]}), 200
 
-    if not all([student_id, fee_structure_id, amount_paid, payment_method, receipt_number]):
-        return jsonify({'success': False, 'message': 'Missing required fields'}), 400
+    elif request.method == 'POST':
+        data = request.get_json()
+        fee_structure_id = data.get('fee_structure_id')
+        amount_paid = data.get('amount_paid')
+        payment_method = data.get('payment_method')
+    
 
-    new_payment = Payment(
-        student_id=student_id,
-        fee_structure_id=fee_structure_id,
-        amount_paid=amount_paid,
-        payment_method=payment_method,
-        receipt_number=receipt_number,
-        payment_status=payment_status,
-        remarks=remarks
-    )
-    return handle_db_commit(new_payment)
+        if not all([fee_structure_id, amount_paid, payment_method]):
+            return jsonify({'success': False, 'message': 'Missing required fields'}), 400
 
-@app.route('/api/payments', methods=['GET'])
-def get_payments():
-    payments = Payment.query.all()
-    return jsonify({'payments': [payment.to_dict() for payment in payments]}), 200
+        new_payment = Payment(
+            student_id=current_user_id,
+            fee_structure_id=fee_structure_id,
+            amount_paid=amount_paid,
+            payment_method=payment_method,
+            
+        )
+        db.session.add(new_payment)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Payment recorded successfully', 'payment_id': new_payment.id}), 201
+
+
+@app.route('/api/payments/<int:payment_id>', methods=['GET', 'DELETE'])
+@jwt_required()
+def payment_detail(payment_id):
+    current_user_id = get_jwt_identity()
+    payment = Payment.query.filter_by(id=payment_id, student_id=current_user_id).first()
+
+    if not payment:
+        return jsonify({'success': False, 'message': 'Payment not found'}), 404
+
+    if request.method == 'GET':
+        return jsonify(payment.to_dict()), 200
+
+    elif request.method == 'DELETE':
+        db.session.delete(payment)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Payment deleted successfully'}), 200
 
 # -------------------- Clearance Status --------------------
-@app.route('/api/clearance/<int:student_id>', methods=['GET'])
-def get_clearance_status(student_id):
-    clearance_status = FeeClearance.query.filter_by(student_id=student_id).first()
+@app.route('/api/clearance', methods=['GET'])
+@jwt_required()
+def get_clearance_status():
+    current_user_id = get_jwt_identity()
+    clearance_status = FeeClearance.query.filter_by(student_id=current_user_id).first()
     if clearance_status:
         return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
     else:
