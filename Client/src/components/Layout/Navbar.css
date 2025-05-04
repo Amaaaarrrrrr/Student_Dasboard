@@ -1,0 +1,29 @@
+/* Make navbar fixed at top */
+nav {
+    position: fixed;
+    top: 4px; /* adjust based on your design */
+    left: 0;
+    width: 100%;
+    z-index: 50; /* stays above most elements */
+  }
+  
+  /* Add some spacing and alignment */
+  .navbar-title {
+    margin-bottom: 0.5rem; /* small gap below title on small screens */
+  }
+  
+  nav a {
+    padding: 0.5rem 1rem; /* add clickable space around links */
+    text-decoration: none;
+  }
+  
+  /* Optional: subtle shadow for depth */
+  nav {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Ensure body content doesn’t get hidden behind fixed navbar */
+  body {
+    padding-top: 80px; /* adjust based on your navbar height */
+  }
+  
