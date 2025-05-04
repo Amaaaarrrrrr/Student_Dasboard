@@ -29,14 +29,10 @@ const Sidebar = ({ role }) => {
   };
 
   return (
-    <aside className="w-64 bg-white border-r p-4">
-      <nav className="space-y-2">
+    <aside>
+      <nav>
         {(links[role] || []).map((link) => (
-          <Link
-            key={link.to}
-            to={link.to}
-            className="block py-2 px-3 rounded hover:bg-gray-100 text-gray-700"
-          >
+          <Link key={link.to} to={link.to}>
             {link.label}
           </Link>
         ))}
