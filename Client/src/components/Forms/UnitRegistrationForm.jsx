@@ -18,7 +18,7 @@ const UnitRegistrationForm = () => {
 
     const fetchStudents = async () => {
         try {
-            const res = await axios.get('/api/students');
+            const res = await axios.get('http://127.0.0.1:5000//api/students');
             setStudents(res.data);
         } catch (err) {
             console.error('Failed to fetch students', err);
@@ -27,7 +27,7 @@ const UnitRegistrationForm = () => {
 
     const fetchUnits = async () => {
         try {
-            const res = await axios.get('/api/units');
+            const res = await axios.get('http://127.0.0.1:5000//api/units_registrations');
             setUnits(res.data);
         } catch (err) {
             console.error('Failed to fetch units', err);
@@ -44,7 +44,7 @@ const UnitRegistrationForm = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await axios.post('/api/unit-registrations', formData);
+            await axios.post('http://127.0.0.1:5000/api/unit-registrations', formData);
             setMessage('Unit registration successful!');
             setFormData({ student_id: '', unit_id: '', semester: '' });
         } catch (err) {

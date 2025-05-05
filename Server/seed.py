@@ -1,7 +1,12 @@
 from app import app, db
-from models import Hostel, Room, StudentRoomBooking, FeeStructure, Payment, ClearanceStatus
+from models import (db, Hostel, Room, StudentRoomBooking, StudentProfile, LecturerProfile,
+                    UnitRegistration, Course, Semester, User, AuditLog, Grade,
+                    UnitRegistration, DocumentRequest,
+                    DocumentRequest, FeeStructure, Payment, Announcement, FeeClearance)
+
 from datetime import datetime, timedelta
 import random
+from werkzeug.security import generate_password_hash
 
 def seed():
     with app.app_context():
@@ -11,7 +16,7 @@ def seed():
         Hostel.query.delete()
         FeeStructure.query.delete()
         Payment.query.delete()
-        ClearanceStatus.query.delete()
+        FeeClearance.query.delete()
 
         # Seed Hostels
         hostel_names = [
@@ -48,10 +53,16 @@ def seed():
         for hostel in hostels:
             for i in range(1, 21):  # 20 rooms per hostel
                 room = Room(
-                    room_number=f'{hostel.name[0]}-{i}',
                     hostel_id=hostel.id,
+                    room_number=f'{hostel.name[0]}-{i}',
+                    bed_count=random.randint(1, 4),
+                    room_type=random.choice(['single', 'double', 'triple']),
                     capacity=random.randint(2, 4),
-                    current_occupancy=0
+                    current_occupancy=0,
+                    price_per_bed = random.randint(1000, 5000)  
+
+                   
+                   
                 )
                 db.session.add(room)
                 rooms.append(room)
@@ -59,6 +70,38 @@ def seed():
 
         db.session.commit()
         print(f'Seeded {len(rooms)} rooms.')
+
+        # Seed Students
+        users =[]
+        for i in range(1, 51):
+            user = User(  
+                name=f'User {i}',            
+                email=f'user{i}@gmail.com',   
+                password_hash=generate_password_hash('y2025',),                
+            )
+
+            db.session.add(user)
+            users.append(user)
+        db.session.commit()
+        print(f'Seeded {len(users)} users.')
+
+        users =User.query.all()
+        if not users:
+            raise ValueError("No users found in the database. Please create users first.")
+        students = []
+        for user in users:
+            student = StudentProfile(
+                user_id=user.id,
+                reg_no =f'REG{i:04d}',                
+                phone_number=user.phone_number,
+                year_of_study=random.randint(1, 4),
+                program=f'Program {i}',
+            )
+            db.session.add(student)
+            students.append(student)
+        db.session.commit()
+        print(f'Seeded {len(students)} students.')
+               
 
         # Seed Bookings
         bookings = []
@@ -120,7 +163,7 @@ def seed():
         # Seed Clearance Statuses
         clearance_statuses = []
         for student_id in range(1, 51):  # For each student
-            clearance_status = ClearanceStatus(
+            clearance_status = FeeClearance(
                 student_id=student_id,
                 hostel_clearance=random.choice([True, False]),
                 fee_clearance=random.choice([True, False]),

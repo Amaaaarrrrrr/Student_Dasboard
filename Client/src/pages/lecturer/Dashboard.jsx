@@ -41,7 +41,7 @@ const Dashboard = () => {
         {/* Card 3 */}
         <div className="dashboard-card">
           <h3 className="card-title">Pending Grades</h3>
-          <p className="card-value">{pendingGrades}</p>
+          <p className="card-value">{pendingGrades} <a href="/grade_submission"><PlusCircle  size={24} />grading</a></p>
           <p className="card-description">Assignments waiting for grading</p>
         </div>
       </div>

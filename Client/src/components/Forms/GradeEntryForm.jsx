@@ -18,7 +18,7 @@ const GradeEntryForm = () => {
 
     const fetchStudents = async () => {
         try {
-            const res = await axios.get('/api/students');
+            const res = await axios.get('http://127.0.0.1:5000/api/students');
             setStudents(res.data);
         } catch (err) {
             console.error('Failed to fetch students', err);
@@ -27,7 +27,7 @@ const GradeEntryForm = () => {
 
     const fetchUnits = async () => {
         try {
-            const res = await axios.get('/api/units');
+            const res = await axios.get('http://127.0.0.1:5000/api/units');
             setUnits(res.data);
         } catch (err) {
             console.error('Failed to fetch units', err);
@@ -44,7 +44,7 @@ const GradeEntryForm = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await axios.post('/api/grades', formData);
+            await axios.post('http://127.0.0.1:5000/api/grades', formData);
             setMessage('Grade entry successful!');
             setFormData({ student_id: '', unit_id: '', grade: '' });
         } catch (err) {

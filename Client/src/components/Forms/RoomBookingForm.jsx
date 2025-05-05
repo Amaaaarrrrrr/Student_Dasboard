@@ -18,7 +18,7 @@ const RoomBookingForm = () => {
 
     const fetchStudents = async () => {
         try {
-            const res = await axios.get('/api/students');
+            const res = await axios.get('http://127.0.0.1:5000/api/students');
             setStudents(res.data);
         } catch (err) {
             console.error('Failed to fetch students', err);
@@ -27,7 +27,7 @@ const RoomBookingForm = () => {
 
     const fetchRooms = async () => {
         try {
-            const res = await axios.get('/api/rooms');
+            const res = await axios.get('http://127.0.0.1:5000/api/rooms');
             setRooms(res.data);
         } catch (err) {
             console.error('Failed to fetch rooms', err);
@@ -44,7 +44,7 @@ const RoomBookingForm = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await axios.post('/api/bookings', formData);
+            await axios.post('http://127.0.0.1:5000/api/bookings', formData);
             setMessage('Room booking successful!');
             setFormData({ student_id: '', room_id: '', booking_date: '' });
         } catch (err) {

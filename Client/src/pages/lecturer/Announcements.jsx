@@ -22,7 +22,7 @@ const Announcements = () => {
     fetch('http://127.0.0.1:5000/api/announcements')
       .then((response) => {
         if (!response.ok) {
-          throw new Error('Failed to fetch announcements');
+          throw new Error('Failed to fetch announcements, Add Some Announcements');
         }
         return response.json();
       })
@@ -43,7 +43,7 @@ const Announcements = () => {
     }
     
     const newAnnouncement = {
-      id: announcements.length + 1,  // Generate a fake ID
+      id: announcements.length + 1,  
       title: newTitle,
       content: newContent,
       created_at: new Date().toISOString(),

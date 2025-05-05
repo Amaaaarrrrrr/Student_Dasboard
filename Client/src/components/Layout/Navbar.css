@@ -1,29 +1,31 @@
-/* Make navbar fixed at top */
+/* Make navbar fixed at top-left */
 nav {
-    position: fixed;
-    top: 4px; /* adjust based on your design */
-    left: 0;
-    width: 100%;
-    z-index: 50; /* stays above most elements */
-  }
-  
-  /* Add some spacing and alignment */
-  .navbar-title {
-    margin-bottom: 0.5rem; /* small gap below title on small screens */
-  }
-  
-  nav a {
-    padding: 0.5rem 1rem; /* add clickable space around links */
-    text-decoration: none;
-  }
-  
-  /* Optional: subtle shadow for depth */
-  nav {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-  
-  /* Ensure body content doesn’t get hidden behind fixed navbar */
-  body {
-    padding-top: 80px; /* adjust based on your navbar height */
-  }
-  
+  position: fixed;
+  top: 4px; /* adjust as needed */
+  left: 4px; /* added: moves it slightly away from the absolute edge */
+  width: 1870px; /* adjust width as needed */
+  z-index: 50; 
+  background-color: white; 
+  padding: 0.5rem 1rem; /* added: give it some breathing room */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* subtle shadow */
+  border-radius: 8px; /* optional: rounded look */
+}
+
+/* Align title properly */
+.navbar-title {
+  margin-bottom: 0; /* no gap below title */
+  font-weight: bold;
+}
+
+/* Style nav links */
+nav a {
+  padding: 0.5rem 1rem;
+  text-decoration: none;
+  color: #333; /* adjust color as needed */
+}
+
+/* Ensure body content doesn’t overlap */
+body {
+  padding-top: 100px; /* adjust if needed depending on navbar height */
+  padding-left: 150px; /* added: create space on the left if nav is wide */
+}

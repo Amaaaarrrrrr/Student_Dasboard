@@ -1,96 +1,146 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const DocumentRequestForm = () => {
-    const [formData, setFormData] = useState({
-        student_id: '',
-        document_type: '',
-        reason: ''
-    });
-    const [message, setMessage] = useState('');
+const ClearanceForm = () => {
+  const [name, setName] = useState('');
+  const [studentId, setStudentId] = useState('');
+  const [clearanceStatus, setClearanceStatus] = useState('');
+  const [department, setDepartment] = useState('');
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [remarks, setRemarks] = useState('');
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [error, setError] = useState(null);
 
-    const documentTypes = [
-        'Transcript',
-        'Certificate',
-        'Clearance Letter',
-        'Admission Letter',
-        'Other'
-    ];
+  const handleFileChange = (event) => {
+    setUploadedFile(event.target.files[0]);
+  };
 
-    const handleChange = (e) => {
-        setFormData({
-            ...formData,
-            [e.target.name]: e.target.value
-        });
-    };
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            await axios.post('/api/document-requests', formData);
-            setMessage('Document request submitted successfully!');
-            setFormData({ student_id: '', document_type: '', reason: '' });
-        } catch (err) {
-            console.error('Request failed', err);
-            setMessage('Failed to submit request. Please try again.');
-        }
-    };
+    if (!uploadedFile) {
+      alert('Please upload a required document.');
+      return;
+    }
 
-    return (
-        <div className="p-4 max-w-md mx-auto">
-            <h2 className="text-xl font-bold mb-4">Document Request Form</h2>
-            {message && <p className="mb-4">{message}</p>}
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('studentId', studentId);
+    formData.append('clearanceStatus', clearanceStatus);
+    formData.append('department', department);
+    formData.append('uploadedFile', uploadedFile);
+    if (clearanceStatus === 'not-cleared') {
+      formData.append('remarks', remarks);
+    }
 
-            <form onSubmit={handleSubmit} className="border p-4 rounded">
-                <div className="mb-2">
-                    <label className="block mb-1">Student ID</label>
-                    <input
-                        type="text"
-                        name="student_id"
-                        value={formData.student_id}
-                        onChange={handleChange}
-                        placeholder="Enter your student ID"
-                        className="border p-2 w-full"
-                        required
-                    />
-                </div>
+    try {
+      const response = await axios.post('http://127.0.0.1:5000/api/clearance', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
-                <div className="mb-2">
-                    <label className="block mb-1">Document Type</label>
-                    <select
-                        name="document_type"
-                        value={formData.document_type}
-                        onChange={handleChange}
-                        className="border p-2 w-full"
-                        required
-                    >
-                        <option value="">Select document</option>
-                        {documentTypes.map((doc) => (
-                            <option key={doc} value={doc}>
-                                {doc}
-                            </option>
-                        ))}
-                    </select>
-                </div>
+      setIsSubmitted(true);
+      console.log('Form submitted:', response.data);
+    } catch (err) {
+      setError('There was an error submitting the form.');
+      console.error('Error submitting form:', err);
+    }
+  };
 
-                <div className="mb-2">
-                    <label className="block mb-1">Reason</label>
-                    <textarea
-                        name="reason"
-                        value={formData.reason}
-                        onChange={handleChange}
-                        placeholder="Provide a brief reason"
-                        className="border p-2 w-full"
-                        required
-                    />
-                </div>
-
-                <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded">
-                    Submit Request
-                </button>
-            </form>
+  return (
+    <div className="clearance-form-container">
+      <h2>Clearance Form - Student Campus Portal</h2>
+      <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label htmlFor="name">Full Name:</label>
+          <input
+            type="text"
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
         </div>
-    );
+        <div className="form-group">
+          <label htmlFor="studentId">Student ID:</label>
+          <input
+            type="text"
+            id="studentId"
+            value={studentId}
+            onChange={(e) => setStudentId(e.target.value)}
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="department">Department:</label>
+          <input
+            type="text"
+            id="department"
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="clearanceStatus">Clearance Status:</label>
+          <select
+            id="clearanceStatus"
+            value={clearanceStatus}
+            onChange={(e) => setClearanceStatus(e.target.value)}
+            required
+          >
+            <option value="">Select Status</option>
+            <option value="cleared">Cleared</option>
+            <option value="pending">Pending</option>
+            <option value="not-cleared">Not Cleared</option>
+          </select>
+        </div>
+
+        {clearanceStatus === 'not-cleared' && (
+          <div className="form-group">
+            <label htmlFor="remarks">Remarks:</label>
+            <textarea
+              id="remarks"
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              placeholder="Provide remarks for not cleared status"
+              required
+            />
+          </div>
+        )}
+
+        <div className="form-group">
+          <label htmlFor="uploadedFile">Upload Clearance Document:</label>
+          <input
+            type="file"
+            id="uploadedFile"
+            onChange={handleFileChange}
+            accept=".pdf,.jpg,.png"
+            required
+          />
+        </div>
+
+        <div className="form-group">
+          <button type="submit">Submit</button>
+        </div>
+      </form>
+
+      {isSubmitted && (
+        <div className="submission-success">
+          <h3>Form Submitted Successfully</h3>
+          <p>Name: {name}</p>
+          <p>Student ID: {studentId}</p>
+          <p>Department: {department}</p>
+          <p>Clearance Status: {clearanceStatus}</p>
+          {clearanceStatus === 'not-cleared' && <p>Remarks: {remarks}</p>}
+          <p>Uploaded File: {uploadedFile ? uploadedFile.name : 'No file uploaded'}</p>
+        </div>
+      )}
+
+      {error && <div className="error">{error}</div>}
+    </div>
+  );
 };
 
-export default DocumentRequestForm;
+export default ClearanceForm;
