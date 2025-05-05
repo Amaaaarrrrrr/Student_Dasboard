@@ -12,7 +12,7 @@ class User(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(50))
+    role = db.Column(db.String(50), default='Student', nullable=False) # 'Student', 'Lecturer', 'Admin'
     phone_number = db.Column(db.String(20))
 
     student_profile = db.relationship('StudentProfile', back_populates='user', uselist=False)
@@ -59,15 +59,15 @@ class StudentProfile(db.Model):
     reg_no = db.Column(db.String(50), nullable=False, unique=True)
     program = db.Column(db.String(100), nullable=False)
     year_of_study = db.Column(db.Integer, nullable=False)
-    phone = db.Column(db.String(20))
+    gender = db.Column(db.String(10), nullable=False)
+    phone_number = db.Column(db.String(20))
     
     
     user = db.relationship('User', back_populates='student_profile')
     unit_registrations = db.relationship('UnitRegistration', back_populates='student')
     room_bookings = db.relationship('StudentRoomBooking', back_populates='student')
     payments = db.relationship('Payment', back_populates='student')
-    fee_clearance = db.relationship('FeeClearance', back_populates='student')
-    unit_registrations = db.relationship('UnitRegistration', back_populates='student')
+    fee_clearance = db.relationship('FeeClearance', back_populates='student')    
 
     document_requests = db.relationship(
         'DocumentRequest',
@@ -147,11 +147,12 @@ class Semester(db.Model):
     start_date = db.Column(db.DateTime, nullable=False)
     end_date = db.Column(db.DateTime, nullable=False)
     active = db.Column(db.Boolean, default=False)
+    fee_structure_id = db.Column(db.Integer, db.ForeignKey('fee_structures.id'))
 
     courses = db.relationship('Course', back_populates='semester')
     grades = db.relationship('Grade', back_populates='semester')
     unit_registrations = db.relationship('UnitRegistration', back_populates='semester')
-
+    fee_structures = db.relationship('FeeStructure', back_populates='semesters')
     serialize_rules = ('id', 'name', 'start_date', 'end_date', 'active')
 
     def to_dict(self, rules=()):
@@ -266,7 +267,8 @@ class Announcement(db.Model):
             'date_posted': self.date_posted.isoformat() if self.date_posted else None,
             'posted_by': self.posted_by.name
         }
-
+# -------------------- Audit Log Model --------------------
+    
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     action = db.Column(db.String(255), nullable=False)
@@ -387,6 +389,8 @@ class FeeStructure(db.Model):
     program = db.Column(db.String(100), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     payments = db.relationship('Payment', back_populates='fee_structure')
+    
+    semesters = db.relationship('Semester', back_populates='fee_structures')
 
     serialize_rules = ('id', 'program', 'amount', 'payments')
 
@@ -403,6 +407,8 @@ class Payment(db.Model):
     amount_paid = db.Column(db.Float, nullable=False)
     payment_date = db.Column(db.DateTime, default=datetime.utcnow)
     payment_method = db.Column(db.String(50), nullable=False)
+    receipt_number = db.Column(db.String(50), nullable=False)
+    payment_status = db.Column(db.String(50), default='Pending')
 
     student = db.relationship('StudentProfile', back_populates='payments')
     fee_structure = db.relationship('FeeStructure', back_populates='payments')
@@ -427,6 +433,8 @@ class FeeClearance(db.Model):
     student_id = db.Column(db.Integer, db.ForeignKey('student_profiles.id'), nullable=False)
     cleared_on = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default='Pending')
+    hostel_clearance = db.Column(db.Boolean, default=False)
+    fee_clearance = db.Column(db.Boolean, default=False)
 
     student = db.relationship('StudentProfile', back_populates='fee_clearance')
 
