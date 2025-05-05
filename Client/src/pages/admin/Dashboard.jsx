@@ -1,27 +1,29 @@
 import React from 'react';
-import "../../index.css"; // Import your CSS file for styles
+import '../../index.css'; // Import global CSS
+
+// Reusable StatCard component
+const StatCard = ({ label, value }) => {
+  return (
+    <div className="statCard" role="region" aria-label={label}>
+      <h2 className="statValue">{value}</h2>
+      <p className="statLabel">{label}</p>
+    </div>
+  );
+};
 
 const Dashboard = () => {
-  // Sample data for dashboard stats
-  const stats = [
-    { id: 1, label: 'Total Users', value: 1200 },
-    { id: 2, label: 'Active Courses', value: 35 },
-    { id: 3, label: 'Pending Clearances', value: 8 },
-    { id: 4, label: 'Hostel Bookings', value: 45 },
-  ];
-
   return (
-    <div className="admin-dashboard">
-      <h1>Admin Dashboard</h1>
-      <div className="stats-grid">
-        {stats.map((stat) => (
-          <div key={stat.id} className="stat-card">
-            <h2>{stat.value}</h2>
-            <p>{stat.label}</p>
-          </div>
-        ))}
-      </div>
-    </div>
+    <main className="adminDashboard" role="main" aria-label="Admin Dashboard">
+      <header>
+        <h1 className="pageTitle">Admin Dashboard</h1>
+      </header>
+      <section aria-label="Dashboard overview">
+        <p>Welcome to the Admin Dashboard.</p>
+      </section>
+      <section aria-label="Dashboard content">
+        {/* Add dashboard widgets, charts, or other components here */}
+      </section>
+    </main>
   );
 };
 
