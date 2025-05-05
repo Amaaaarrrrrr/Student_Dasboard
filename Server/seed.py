@@ -111,7 +111,8 @@ def seed():
                     # Seed Admin
             elif user.role == 'admin':
                 admins.append(user) #we need user record for admin
-        print(f'Created {len(users)} users, {len(students)} students, {len(lecturers)} lecturers, and {len(admins)} admins.')        
+        print(f'Created {len(users)} users, {len(students)} students, {len(lecturers)} lecturers, and {len(admins)} admins.')
+        db.session.commit()       
         
         student_ids = [student.id for student in StudentProfile.query.all()]
         room_objects = Room.query.all()
@@ -202,6 +203,28 @@ def seed():
             print(f"Error committing clearance statuses: {e}")
 
         print(f'Seeding completed successfully {len(clearance_statuses)} clearance statuses.')
+
+        # Seed Audit Logs
+        #predefined actions
+        actions = ['created', 'updated permissions', 'deleted','login','logout','viewed','password changed']
+        users = User.query.all()
+        if not users:
+            print("No users found to create audit logs.")
+            exit()
+        for i in range(100):
+            user = random.choice(users)
+            action = random.choice(actions)
+            timestamp = datetime.utcnow() - timedelta(days=random.randint(1, 30))
+            audit_log = AuditLog(
+                user_id=user.id,
+                action=action,
+                timestamp=timestamp,
+                details=f'User {user.name} {action} at {timestamp}'              
+            )
+            db.session.add(audit_log)
+        db.session.commit()
+        print(f'Generated {len(users)} audit logs for the last 30 days.')
+
     print("Seeding completed successfully!")
 
 if __name__ == '__main__':
