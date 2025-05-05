@@ -18,7 +18,7 @@ const UnitRegistrationForm = () => {
 
     const fetchStudents = async () => {
         try {
-            const res = await axios.get('http://127.0.0.1:5000//api/students');
+            const res = await axios.get('http://127.0.0.1:5000/api/students');
             setStudents(res.data);
         } catch (err) {
             console.error('Failed to fetch students', err);
@@ -27,7 +27,7 @@ const UnitRegistrationForm = () => {
 
     const fetchUnits = async () => {
         try {
-            const res = await axios.get('http://127.0.0.1:5000//api/units_registrations');
+            const res = await axios.get('http://127.0.0.1:5000/api/units_registrations');
             setUnits(res.data);
         } catch (err) {
             console.error('Failed to fetch units', err);
