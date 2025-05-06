@@ -21,7 +21,10 @@ const Dashboard = () => {
         <p>Welcome to the Admin Dashboard.</p>
       </section>
       <section aria-label="Dashboard content">
-        {/* Add dashboard widgets, charts, or other components here */}
+        {/* Example dashboard widgets */}
+        <StatCard label="Total Users" value="150" />
+        <StatCard label="Active Sessions" value="45" />
+        <StatCard label="Pending Requests" value="12" />
       </section>
     </main>
   );

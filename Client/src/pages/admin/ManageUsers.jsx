@@ -19,47 +19,67 @@ const ManageUsers = () => {
       user.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Handle user deletion
+  // Handle user deletion with confirmation
   const handleDelete = (id) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       setUsers(users.filter((user) => user.id !== id));
     }
   };
 
+  // Styles moved to objects for better readability
+  const styles = {
+    container: { padding: '20px' },
+    searchInput: { padding: '8px', width: '300px', marginBottom: '20px' },
+    table: { width: '100%', borderCollapse: 'collapse' },
+    headerRow: { borderBottom: '2px solid #ccc' },
+    headerCell: { textAlign: 'left', padding: '8px' },
+    row: { borderBottom: '1px solid #eee' },
+    cell: { padding: '8px' },
+    deleteButton: { color: 'red' },
+    viewButton: { marginRight: '10px' },
+    noUsersCell: { padding: '8px', textAlign: 'center' },
+  };
+
   return (
-    <div className="manage-users" style={{ padding: '20px' }}>
+    <div className="manage-users" style={styles.container}>
       <h1>Manage Users</h1>
       <input
         type="text"
         placeholder="Search users..."
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        style={{ padding: '8px', width: '300px', marginBottom: '20px' }}
+        style={styles.searchInput}
+        aria-label="Search users"
       />
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table style={styles.table} aria-label="User list">
         <thead>
-          <tr style={{ borderBottom: '2px solid #ccc' }}>
-            <th style={{ textAlign: 'left', padding: '8px' }}>Name</th>
-            <th style={{ textAlign: 'left', padding: '8px' }}>Email</th>
-            <th style={{ textAlign: 'left', padding: '8px' }}>Role</th>
-            <th style={{ textAlign: 'left', padding: '8px' }}>Actions</th>
+          <tr style={styles.headerRow}>
+            <th style={styles.headerCell}>Name</th>
+            <th style={styles.headerCell}>Email</th>
+            <th style={styles.headerCell}>Role</th>
+            <th style={styles.headerCell}>Actions</th>
           </tr>
         </thead>
         <tbody>
           {filteredUsers.length > 0 ? (
             filteredUsers.map((user) => (
-              <tr key={user.id} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '8px' }}>{user.name}</td>
-                <td style={{ padding: '8px' }}>{user.email}</td>
-                <td style={{ padding: '8px' }}>{user.role}</td>
-                <td style={{ padding: '8px' }}>
+              <tr key={user.id} style={styles.row}>
+                <td style={styles.cell}>{user.name}</td>
+                <td style={styles.cell}>{user.email}</td>
+                <td style={styles.cell}>{user.role}</td>
+                <td style={styles.cell}>
                   <button
                     onClick={() => alert(`Viewing user: ${user.name}`)}
-                    style={{ marginRight: '10px' }}
+                    style={styles.viewButton}
+                    aria-label={`View details for ${user.name}`}
                   >
                     View
                   </button>
-                  <button onClick={() => handleDelete(user.id)} style={{ color: 'red' }}>
+                  <button
+                    onClick={() => handleDelete(user.id)}
+                    style={styles.deleteButton}
+                    aria-label={`Delete user ${user.name}`}
+                  >
                     Delete
                   </button>
                 </td>
@@ -67,7 +87,7 @@ const ManageUsers = () => {
             ))
           ) : (
             <tr>
-              <td colSpan="4" style={{ padding: '8px', textAlign: 'center' }}>
+              <td colSpan="4" style={styles.noUsersCell}>
                 No users found.
               </td>
             </tr>

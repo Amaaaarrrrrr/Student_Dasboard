@@ -23,6 +23,7 @@ twilio = "*"
 flask-login = "*"
 flask-limiter = "*"
 email-validator = "*"
+faker = "*"
 
 [dev-packages]
 pytest = "*"
