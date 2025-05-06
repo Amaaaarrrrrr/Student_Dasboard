@@ -171,10 +171,12 @@ class UnitRegistration(db.Model):
     __tablename__ = 'unit_registrations'
 
     id = db.Column(db.Integer, primary_key=True)
+    reg_no = db.Column(db.string(50), db)
     student_id = db.Column(db.Integer, db.ForeignKey('student_profiles.id'), nullable=False)
     course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
     semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id'), nullable=False)
     registered_on = db.Column(db.DateTime, default=datetime.utcnow)
+    
 
     student = db.relationship('StudentProfile', back_populates='unit_registrations')
     course = db.relationship('Course', back_populates='unit_registrations')
