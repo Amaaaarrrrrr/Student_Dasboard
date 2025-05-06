@@ -3,12 +3,12 @@ import Sidebar from "../Layout/Sidebar";
 import Footer from "../Layout/Footer";
 import { Outlet } from "react-router-dom";
 
-const LecturerLayout = () => {
+const AdminLayout = () => {
   return (
     <div>
       <Navbar />
       <div>
-        <Sidebar role="lecturer" />
+        <Sidebar role="admin" />
         <main>
           <Outlet />
         </main>
@@ -18,4 +18,4 @@ const LecturerLayout = () => {
   );
 };
 
-export default LecturerLayout;
+export default AdminLayout;

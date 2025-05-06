@@ -7,7 +7,7 @@ const Sidebar = ({ role }) => {
       { to: "/student/units", label: "Units" },
       { to: "/student/accommodation", label: "Accommodation" },
       { to: "/student/fees", label: "Fees" },
-      { to: "/student/clearance", label: "Clearance" },
+      { to: "/student/Announcement", label: "Announcement" },
       { to: "/student/documents", label: "Documents" },
       { to: "/student/grades", label: "Grades" },
     ],

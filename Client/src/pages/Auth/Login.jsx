@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const LoginComponent = () => {
+const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -33,6 +33,11 @@ const LoginComponent = () => {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    navigate('/login'); // Redirect to login page after logout
+  };
+
   return (
     <div>
       <h2>Login</h2>
@@ -58,8 +63,9 @@ const LoginComponent = () => {
         {error && <p>{error}</p>}
         <button type="submit">Login</button>
       </form>
+      <button onClick={handleLogout}>Logout</button>
     </div>
   );
 };
 
-export default LoginComponent;
+export default Login;
