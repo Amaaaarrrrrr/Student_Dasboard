@@ -225,7 +225,150 @@ def seed():
         db.session.commit()
         print(f'Generated {len(users)} audit logs for the last 30 days.')
 
-    print("Seeding completed successfully!")
+        #course registration
+       
+        # Fetch existing semesters
+        semesters = Semester.query.all()
+
+        if not semesters:
+            print("⚠️ Please seed the Semester table before running this script.")
+        else:
+            #
+            programs = ['Computer Science', 'Mathematics', 'Engineering', 'Physics', 'Biology', 'Chemistry', 'Economics']
+            course_records = []
+
+            for i in range(100):
+                code =f"C{i+1001}" # Generate a unique code
+                title = f"Course {i+1001}"
+                description = f"Description for course {i+1001}"
+                program = random.choice(programs)
+                semester_id = random.choice(semesters).id
+
+                courses = Course(
+                    code=code,
+                    title=title,
+                    description=description,
+                    program=program,
+                    semester_id=semester_id
+                
+                )
+                course_records.append(courses)
+
+            db.session.add_all(course_records)
+            db.session.commit()
+
+            print(f" Seeded {len(course_records)} courses.")
+
+                
+
+                #unit registration
+
+            #fetch existing student,courses, and semester
+            students= StudentProfile.query.all()
+            courses = Course.query.all()
+            semesters = Semester.query.all()
+            if not students or not courses or not semester:
+                print ("please capture StudentProfile . Courses, and Sememster tables first before running this script")
+            else: unit_registrations =[]
+
+            for i in range (100):
+                registration = UnitRegistration(
+                    student_id = random.choice(students).id,
+                    course_id = random.choice(courses).id,
+                    semester_id = random.choice(semesters).id,
+                    registered_on = datetime.utcnow()
+                ) 
+                unit_registrations.append(registration)
+            db.session.add_all(unit_registrations)
+            db.session.commit()
+            print(f"Added {len(unit_registrations)} units") 
+
+        #Announcement
+        sample_titles = [
+            "New System Update",
+            "Important Announcement",
+            "Upcoming Event",
+            "Urgent: Action Required",
+            "Weekly News Update",
+            "New Policy Implementation",
+            "System Downtime Notice",
+            "Employee of the Month Announcement",
+            "Important Deadline Reminder",
+            "Companywide Meeting"
+        ]
+
+        sample_contents = [
+            "We are pleased to announce the launch of our new system, which provides a more efficient and user-friendly experience for our users.",
+            "This is an important announcement that requires immediate attention from all employees.",
+            "We are hosting an event this week, so please make sure to attend.",
+            "This is an urgent announcement that requires immediate action from all employees.",
+            "We have a weekly news update to share with all employees.",
+            "We are implementing a new policy that requires all employees to adhere to.",
+            "The system is currently down for maintenance, and we apologize for any inconvenience caused.",
+            "This is an announcement celebrating the employee of the month.",
+            "This is an important deadline reminder that requires immediate action from all employees.",
+        ]
+
+        announcements =[
+            Announcement(title=random.choice(sample_titles), 
+                content=random.choice(sample_contents),
+                date_posted=datetime.utcnow(),
+                posted_by_id=user.id
+            ) for user in users
+        ]
+
+        print(f"Seeding completed for {len(announcements)} announcements.")
+
+        #Document Requests
+        document_types =["Transcript",
+            "Enrollment Certificate",
+            "Graduation Letter",
+            "Recommendation Letter",
+            "Fee Clearance",
+            "ID Replacement",
+            "Course Completion Certificate",
+            "Others"
+        ]
+        statuses = ["Pending", "Approved", "Rejected"]
+
+        DocumentRequest.query.delete()
+        users = User.query.all()
+        student_profiles = StudentProfile.query.all()
+        if not users or not student_profiles:
+            print("No users or student profiles found to create document requests.")
+            exit()
+        else:
+            requests =[]
+            for i in range(100):
+                user = random.choice(users)
+                student_profile = random.choice(student_profiles)
+
+                requested_on = datetime.utcnow() - timedelta(days=random.randint(0, 30))
+                processed_on = requested_on + timedelta(days=random.randint(1, 10)) if random.choice([True, False]) else None
+
+                request = DocumentRequest(
+                    user_id=user.id,
+                    student_id=student_profile.id,
+                    document_type=random.choice(document_types),
+                    status=random.choice(statuses),
+                    requested_on=requested_on,
+                    processed_on=processed_on
+                )
+                requests.append(request)
+
+        db.session.bulk_save_objects(requests)
+        db.session.commit()
+        print(f"Seeded {len(requests)} documents requests.")
+    
+       
+
+        
+
+
+
+
+
+    print("The entire Seeding file worked for all fields!")
 
 if __name__ == '__main__':
     seed()
