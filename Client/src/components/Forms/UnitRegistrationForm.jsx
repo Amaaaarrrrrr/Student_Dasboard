@@ -10,41 +10,74 @@ const UnitRegistrationForm = () => {
         semester: '',
     });
     const [message, setMessage] = useState('');
+    const [loading, setLoading] = useState(true); // Loading state for data fetching
+
+    // Retrieve token from localStorage (or wherever you store it after login)
+    const token = localStorage.getItem('accessToken');
 
     useEffect(() => {
-        fetchStudents();
-        fetchUnits();
-    }, []);
+        if (!token) {
+            setMessage('You must be logged in to register units');
+            setLoading(false);
+            return;
+        }
+
+        // Fetch students and units concurrently
+        const fetchData = async () => {
+            try {
+                await Promise.all([fetchStudents(), fetchUnits()]);
+            } catch (err) {
+                setMessage('Failed to fetch data. Please try again later.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [token]);
 
     const fetchStudents = async () => {
         try {
-            const res = await axios.get('http://127.0.0.1:5000/api/students');
-            setStudents(res.data);
+            const res = await axios.get('http://127.0.0.1:5000/api/students', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setStudents(res.data.students); // assuming backend returns { students: [...] }
         } catch (err) {
             console.error('Failed to fetch students', err);
+            setMessage('Failed to fetch students. Please try again.');
         }
     };
 
     const fetchUnits = async () => {
         try {
-            const res = await axios.get('http://127.0.0.1:5000/api/units_registrations');
-            setUnits(res.data);
+            const res = await axios.get('http://127.0.0.1:5000/api/registration', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setUnits(res.data.units); // assuming backend returns { units: [...] }
         } catch (err) {
             console.error('Failed to fetch units', err);
+            setMessage('Failed to fetch units. Please try again.');
         }
     };
 
     const handleChange = (e) => {
         setFormData({
             ...formData,
-            [e.target.name]: e.target.value
+            [e.target.name]: e.target.value,
         });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!formData.student_id || !formData.unit_id || !formData.semester) {
+            setMessage('Please fill all fields.');
+            return;
+        }
+
         try {
-            await axios.post('http://127.0.0.1:5000/api/unit-registrations', formData);
+            await axios.post('http://127.0.0.1:5000/api/registration', formData, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
             setMessage('Unit registration successful!');
             setFormData({ student_id: '', unit_id: '', semester: '' });
         } catch (err) {
@@ -53,10 +86,14 @@ const UnitRegistrationForm = () => {
         }
     };
 
+    if (loading) {
+        return <div>Loading...</div>; // Display a loading message while fetching data
+    }
+
     return (
         <div className="p-4 max-w-md mx-auto">
             <h2 className="text-xl font-bold mb-4">Unit Registration Form</h2>
-            {message && <p className="mb-4">{message}</p>}
+            {message && <p className="mb-4 text-red-500">{message}</p>} {/* Red color for error messages */}
 
             <form onSubmit={handleSubmit} className="border p-4 rounded">
                 <div className="mb-2">
@@ -71,7 +108,7 @@ const UnitRegistrationForm = () => {
                         <option value="">Select student</option>
                         {students.map((student) => (
                             <option key={student.id} value={student.id}>
-                                {student.name}
+                                {student.user ? student.user.name : student.name} {/* Adjusted to show student name */}
                             </option>
                         ))}
                     </select>
