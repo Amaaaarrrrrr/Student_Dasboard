@@ -1,0 +1,41 @@
+# React: Node modules and build files
+Client/node_modules/
+Client/build/
+Client/.env
+
+# Flask: Python cache, environments, and instance-specific files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.env
+.env/
+.venv/
+venv/
+instance/
+*.sqlite3
+*.db
+*.db-journal
+*.pid
+
+# Flask Migrations
+Server/migrations/versions/__pycache__/
+
+# Coverage and testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Logs and system files
+*.log
+*.bak
+*.swp
+*~
+.DS_Store
+ehthumbs.db
+Thumbs.db
+
+# IDE/editor settings
+.vscode/
+.idea/

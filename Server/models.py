@@ -3,6 +3,14 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 db = SQLAlchemy()
 
+# -------------------- Course Prerequisite Table --------------------
+
+course_prerequisites = db.Table(
+    'course_prerequisites',
+    db.Column('course_id', db.Integer, db.ForeignKey('courses.id')),
+    db.Column('prerequisite_id', db.Integer, db.ForeignKey('courses.id'))
+)
+
 # -------------------- User Model --------------------
 
 class User(db.Model):
@@ -11,7 +19,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
+    password= db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(50), nullable=False)
 
     student_profile = db.relationship('StudentProfile', back_populates='user', uselist=False)
@@ -24,10 +32,10 @@ class User(db.Model):
     serialize_rules = ('id', 'name', 'email', 'role')
 
     def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+        self.password = generate_password_hash(password)
 
     def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+        return check_password_hash(self.password, password)
 
     def to_dict(self, rules=()):
         # Handle exclusion rules (fields prefixed with '-')
@@ -86,13 +94,13 @@ class LecturerProfile(db.Model):
     phone = db.Column(db.String(20))
 
     user = db.relationship('User', back_populates='lecturer_profile')
+    courses = db.relationship('Course', back_populates='lecturer')  # NEW
 
     serialize_rules = ('id', 'staff_no', 'department', 'phone')
 
     def to_dict(self, rules=()):
         rules = rules or self.serialize_rules
         return {field: getattr(self, field) for field in rules}
-
 
 # -------------------- Course Model --------------------
 
@@ -105,11 +113,16 @@ class Course(db.Model):
     description = db.Column(db.String(200))
     semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id'), nullable=False)
     program = db.Column(db.String(50), nullable=False)
-    grades = db.relationship('Grade', back_populates='course')
 
+    lecturer_id = db.Column(db.Integer, db.ForeignKey('lecturer_profiles.id'))  # NEW
 
+    lecturer = db.relationship('LecturerProfile', back_populates='courses')     # NEW
     semester = db.relationship('Semester', back_populates='courses')
+    grades = db.relationship('Grade', back_populates='course')
     unit_registrations = db.relationship('UnitRegistration', back_populates='course')
+    fee_structures = db.relationship('FeeStructure', back_populates='course')
+
+    # Prerequisite logic (unchanged)
     prerequisites = db.relationship(
         'Course',
         secondary='course_prerequisites',
@@ -124,13 +137,15 @@ class Course(db.Model):
         secondaryjoin='Course.id==course_prerequisites.c.course_id',
         back_populates='prerequisites'
     )
-   
 
-    serialize_rules = ('id', 'code', 'title', 'description', 'semester_id', 'program')
+    serialize_rules = ('id', 'code', 'title', 'description', 'semester_id', 'program', 'lecturer_id')
 
     def to_dict(self, rules=()):
         rules = rules or self.serialize_rules
-        return {field: getattr(self, field) for field in rules}
+        course_dict = {field: getattr(self, field) for field in rules}
+        if 'lecturer' in rules and self.lecturer:
+            course_dict['lecturer'] = self.lecturer.to_dict()
+        return course_dict
 
 
 # -------------------- Semester Model --------------------
@@ -147,6 +162,7 @@ class Semester(db.Model):
     courses = db.relationship('Course', back_populates='semester')
     grades = db.relationship('Grade', back_populates='semester')
     unit_registrations = db.relationship('UnitRegistration', back_populates='semester')
+    fee_structures = db.relationship('FeeStructure', back_populates='semester')
 
 
     serialize_rules = ('id', 'name', 'start_date', 'end_date', 'active')
@@ -189,10 +205,7 @@ class UnitRegistration(db.Model):
 
     @staticmethod
     def check_prerequisites_met(student_id, course):
-        """
-        This method assumes the Course model has a relationship or field for prerequisites,
-        and we have a way to know completed courses for the student.
-        """
+        
         if not course.prerequisites:
             return True  # No prerequisites required
 
@@ -216,13 +229,6 @@ class UnitRegistration(db.Model):
         }
 
 
-# -------------------- Course Prerequisite Table --------------------
-
-course_prerequisites = db.Table(
-    'course_prerequisites',
-    db.Column('course_id', db.Integer, db.ForeignKey('courses.id')),
-    db.Column('prerequisite_id', db.Integer, db.ForeignKey('courses.id'))
-)
 
 
 class Grade(db.Model):
@@ -295,6 +301,10 @@ class DocumentRequest(db.Model):
     requested_on = db.Column(db.DateTime, default=datetime.utcnow)
     processed_on = db.Column(db.DateTime)
 
+    # NEW fields for file upload
+    file_name = db.Column(db.String(255))
+    file_path = db.Column(db.String(255))
+
     student = db.relationship('User', back_populates='document_requests')
 
     def to_dict(self):
@@ -304,10 +314,10 @@ class DocumentRequest(db.Model):
             'document_type': self.document_type,
             'status': self.status,
             'requested_on': self.requested_on.isoformat() if self.requested_on else None,
-            'processed_on': self.processed_on.isoformat() if self.processed_on else None
+            'processed_on': self.processed_on.isoformat() if self.processed_on else None,
+            'file_name': self.file_name,
+            'file_path': self.file_path
         }
-
-
 
 # -------------------- Hostel and Accommodation Models --------------------
 
@@ -319,6 +329,7 @@ class Hostel(db.Model):
     location = db.Column(db.String(255), nullable=False)
     capacity = db.Column(db.Integer, nullable=False)
     rooms = db.relationship('Room', back_populates='hostel')
+    fee_structures = db.relationship('FeeStructure', back_populates='hostel')
 
     serialize_rules = ('id', 'name', 'location', 'capacity')
 
@@ -379,16 +390,28 @@ class FeeStructure(db.Model):
     __tablename__ = 'fee_structures'
 
     id = db.Column(db.Integer, primary_key=True)
-    program = db.Column(db.String(100), nullable=False)
+    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
+    hostel_id = db.Column(db.Integer, db.ForeignKey('hostels.id'), nullable=False)
+    semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id'), nullable=False)
     amount = db.Column(db.Float, nullable=False)
+    
+    course = db.relationship('Course', back_populates='fee_structures')
+    hostel = db.relationship('Hostel', back_populates='fee_structures')
+    semester = db.relationship('Semester', back_populates='fee_structures')
     payments = db.relationship('Payment', back_populates='fee_structure')
 
-    serialize_rules = ('id', 'program', 'amount', 'payments')
+    serialize_rules = ('id', 'course', 'hostel', 'semester', 'amount', 'payments')
 
     def to_dict(self, rules=()):
         rules = rules or self.serialize_rules
-        return {field: getattr(self, field) for field in rules}
-
+        return {
+            'id': self.id,
+            'course': self.course.to_dict(),
+            'hostel': self.hostel.to_dict(),
+            'semester': self.semester.to_dict(),
+            'amount': self.amount,
+            'payments': [payment.to_dict() for payment in self.payments]
+        }
 
 class Payment(db.Model):
     __tablename__ = 'payments'
@@ -402,16 +425,15 @@ class Payment(db.Model):
 
     student = db.relationship('StudentProfile', back_populates='payments')
     fee_structure = db.relationship('FeeStructure', back_populates='payments')
-    
 
-    serialize_rules = ('id', 'student_id', 'amount_paid', 'payment_date', 'payment_method')
+    serialize_rules = ('id', 'student_id', 'amount_paid', 'payment_date', 'payment_method', 'fee_structure')
 
     def to_dict(self, rules=()):
         rules = rules or self.serialize_rules
         return {
             'id': self.id,
             'student_id': self.student_id,
-            'fee_structure_id': self.fee_structure_id,
+            'fee_structure': self.fee_structure.to_dict(rules=('course', 'hostel', 'semester', 'amount')),
             'amount_paid': self.amount_paid,
             'payment_date': self.payment_date.isoformat(),
             'payment_method': self.payment_method
