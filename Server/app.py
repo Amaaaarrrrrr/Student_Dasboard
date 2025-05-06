@@ -414,7 +414,7 @@ I've been working on building a Student Portal system that manages:
 
     # -------------------- Announcements Routes --------------------
     @app.route('/api/announcements', methods=['GET', 'POST'])
-    @role_required('admin')
+    # @role_required('admin')
     def announcements():
         if request.method == 'GET':
             announcements = Announcement.query.all()
