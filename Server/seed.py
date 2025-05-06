@@ -20,8 +20,12 @@ def seed_users():
             role=role
         )
         user.set_password('password')  
+    try:
         db.session.add(user)
-    db.session.commit()
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        print(f"User with email {user.email} already exists.")
 
 # Seed Semesters
 def seed_semesters():
@@ -191,9 +195,9 @@ def seed_document_requests():
     db.session.commit()
 
 def seed_data():
-    with app.app_context():  # Ensure the app context is active
+    with app.app_context():
         try:
-            print("Starting to seed data...")  # Initial print statement to show the script is running
+            print("Starting to seed data...")
             db.create_all()  # Create tables
             print("Tables created.")
             
@@ -239,8 +243,7 @@ def seed_data():
             seed_document_requests()
             print("Document requests seeded.")
             
-            print("Database seeded successfully!")  # Success message after all seeding
-            
+            print("Database seeded successfully!")
         except IntegrityError as e:
             db.session.rollback()
             print(f"Integrity Error: {e}")
