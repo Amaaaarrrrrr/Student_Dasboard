@@ -1,374 +1,249 @@
-from app import app, db
-from models import (Hostel, Room, StudentRoomBooking, StudentProfile, LecturerProfile,
-                    UnitRegistration, Course, Semester, User, AuditLog, Grade,
-                    DocumentRequest, FeeStructure, Payment, Announcement, FeeClearance)
-
-from datetime import datetime, timedelta
 import random
-import uuid
-from werkzeug.security import generate_password_hash
+from datetime import datetime
+from sqlalchemy.exc import IntegrityError
+from app import db, app
+from models import User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration, Grade, Hostel, Room, FeeStructure, Payment, FeeClearance, Announcement, DocumentRequest
 
-def seed():
-   
-    with app.app_context():
-        # Clear existing data (in correct dependency order)
-        db.drop_all()  # Drop all tabl
-        db.create_all()  # Ensure all tables are created
-        StudentRoomBooking.query.delete()
-        FeeClearance.query.delete()
-        Payment.query.delete()
-        FeeStructure.query.delete()
-        StudentProfile.query.delete()
-        User.query.delete()
-        Room.query.delete()
-        Hostel.query.delete()
-        db.session.commit()
 
-        # Seed Hostels
-        hostel_names = [
-            ('Nyayo 4 Hostel', 'North Wing', 100),
-            ('Beta Hostel', 'South Wing', 80),
-            ('Gamma Hostel', 'East Wing', 120),
-            ('Delta Hostel', 'West Wing', 90),
-            ('Kilimanjaro Hostel', 'Central Block', 110),
-            ('Zeta Hostel', 'Annex Block', 70),
-            ('Eta Hostel', 'Garden Block', 60),
-            ('Nyayo 3 Hostel', 'Roof Block', 50),
-            ('Nyayo 2', 'Basement Block', 40),
-            ('Nyayo 12', 'Main Block', 130),
-            ('Nyayo 5', 'Upper Block', 150),
-            ('Nyandarua Hostel', 'Lower Block', 160),
-            ('Ruenzori Hostel', 'Side Block', 170),
-            ('Abadare Hostel', 'Back Block', 180),
-            ('Aberdare Hostel', 'Front Block', 190),
-        ]
+# Helper function to create random dates
+def random_date(start, end):
+    return start + (end - start) * random.random()
 
-        hostels = []
-        for name, location, capacity in hostel_names:
-            hostel = Hostel(name=name, location=location, capacity=capacity)
-            db.session.add(hostel)
-            hostels.append(hostel)
-        db.session.commit()
-        print(f'Created {len(hostels)} hostels.')
+# Seed Users
+def seed_users():
+    roles = ['student', 'lecturer', 'admin']
+    for i in range(1, 101):
+        role = random.choice(roles)
+        user = User(
+            name=f'User {i}',
+            email=f'user{i}@example.com',
+            role=role
+        )
+        user.set_password('password')  
+        db.session.add(user)
+    db.session.commit()
 
-        # Seed Rooms
-        rooms = []
-        for hostel in hostels:
-            for i in range(1, 21):  # 20 rooms per hostel
-                room = Room(
+# Seed Semesters
+def seed_semesters():
+    semesters = [
+        ('Spring 2025', datetime(2025, 1, 1), datetime(2025, 5, 31)),
+        ('Fall 2025', datetime(2025, 8, 1), datetime(2025, 12, 31)),
+        ('Summer 2025', datetime(2025, 6, 1), datetime(2025, 8, 31))
+    ]
+    for name, start, end in semesters:
+        semester = Semester(name=name, start_date=start, end_date=end, active=False)
+        db.session.add(semester)
+    db.session.commit()
+
+# Seed Courses
+def seed_courses():
+    for i in range(1, 16):
+        course = Course(
+            code=f'CS{i:03}',
+            title=f'Course {i}',
+            description=f'This is course {i} description.',
+            semester_id=random.randint(1, 3),  # Randomly assign a semester
+            program='Computer Science'
+        )
+        db.session.add(course)
+    db.session.commit()
+
+# Seed Lecturers
+def seed_lecturers():
+    for i in range(1, 11):
+        lecturer = LecturerProfile(
+            user_id=i,  # Assuming lecturer users are the first 10
+            staff_no=f'ST{1000 + i}',
+            department=f'Department {i}',
+            phone=f'0712{random.randint(100000, 999999)}'
+        )
+        db.session.add(lecturer)
+    db.session.commit()
+
+# Seed Student Profiles
+def seed_student_profiles():
+    for i in range(1, 101):  # Assuming first 100 users are students
+        student_profile = StudentProfile(
+            user_id=i,
+            reg_no=f'ST{10000 + i}',
+            program='Computer Science',
+            year_of_study=random.randint(1, 4),
+            phone=f'0712{random.randint(100000, 999999)}'
+        )
+        db.session.add(student_profile)
+    db.session.commit()
+
+# Seed Unit Registrations
+def seed_unit_registrations():
+    for student in StudentProfile.query.all():
+        courses = random.sample(Course.query.all(), 5)  # Assign 5 random courses
+        for course in courses:
+            semester = random.choice(Semester.query.all())
+            if not UnitRegistration.is_already_registered(student.id, course.id, semester.id) and UnitRegistration.check_prerequisites_met(student.id, course):
+                unit_registration = UnitRegistration(
+                    student_id=student.id,
+                    course_id=course.id,
+                    semester_id=semester.id
+                )
+                db.session.add(unit_registration)
+    db.session.commit()
+
+# Seed Grades
+def seed_grades():
+    for student in StudentProfile.query.all():
+        for course in Course.query.all():
+            if random.choice([True, False]):
+                grade = Grade(
+                    student_id=student.user_id,
+                    course_id=course.id,
+                    grade=random.choice(['A', 'B', 'C', 'D', 'F']),
+                    semester_id=random.choice([1, 2, 3])
+                )
+                db.session.add(grade)
+    db.session.commit()
+
+# Seed Announcements
+def seed_announcements():
+    for i in range(1, 21):
+        announcement = Announcement(
+            title=f'Announcement {i}',
+            content=f'Content for announcement {i}.',
+            posted_by_id=random.randint(1, 10)
+        )
+        db.session.add(announcement)
+    db.session.commit()
+
+# Seed Hostels
+def seed_hostels():
+    for i in range(1, 6):
+        hostel = Hostel(
+            name=f'Hostel {i}',
+            location=f'Location {i}',
+            capacity=random.randint(50, 200)
+        )
+        db.session.add(hostel)
+    db.session.commit()
+
+# Seed Rooms
+def seed_rooms():
+    for hostel in Hostel.query.all():
+        for i in range(1, 6):  # Each hostel has 5 rooms
+            room = Room(
+                hostel_id=hostel.id,
+                room_number=f'{hostel.name[:3]}-{i}',
+                bed_count=random.randint(1, 4),
+                price_per_bed=random.randint(3000, 5000)
+            )
+            db.session.add(room)
+    db.session.commit()
+
+# Seed Fee Structures
+def seed_fee_structures():
+    for course in Course.query.all():
+        for hostel in Hostel.query.all():
+            for semester in Semester.query.all():
+                fee_structure = FeeStructure(
+                    course_id=course.id,
                     hostel_id=hostel.id,
-                    room_number=f'{hostel.name[0]}-{i}',
-                    bed_count=random.randint(1, 4),
-                    room_type=random.choice(['single', 'double', 'triple']),
-                    capacity=random.randint(2, 4),
-                    current_occupancy=0,
-                    price_per_bed=random.randint(1000, 5000)
+                    semester_id=semester.id,
+                    amount=random.randint(15000, 50000)
                 )
-                db.session.add(room)
-                rooms.append(room)
-        db.session.commit()
-        print(f'And added {len(rooms)} rooms.')
+                db.session.add(fee_structure)
+    db.session.commit()
 
-        # Seed Users and Students
-        users = []
-        admins = []
-        lecturers = []
-        students = []
-        roles = ['admin', 'lecturer', 'student']
-
-        for i in range(50):
-            user_role = random.choice(roles)
-            user = User(
-                name=f'User {i}', 
-                email=f'user{i}@example.com', 
-                password_hash =generate_password_hash('password'), 
-                role=user_role,
-            )
-            db.session.add(user)
-            db.session.flush()  # Ensure user ID is available for foreign key
-            users.append(user)
-            if user.role == 'student':
-                student = StudentProfile(
-                   user_id=user.id,
-                   program =f'Program {random.randint(1, 5)}',
-                   reg_no=f'REG{random.randint(1000, 9999)}',
-                   phone_number=f'071234567{i}',
-                   year_of_study=random.randint(1, 4),
-                   gender=random.choice(['male', 'female']),
+# Seed Payments
+def seed_payments():
+    for student in StudentProfile.query.all():
+        for fee_structure in FeeStructure.query.all():
+            if random.choice([True, False]):
+                payment = Payment(
+                    student_id=student.id,
+                    fee_structure_id=fee_structure.id,
+                    amount_paid=random.randint(5000, 20000),
+                    payment_method=random.choice(['Credit', 'Debit', 'Cash']),
+                    payment_date=random_date(datetime(2025, 1, 1), datetime(2025, 12, 31))
                 )
-                db.session.add(student)
-                students.append(student)
-            elif user.role == 'lecturer':
-                lecturer = LecturerProfile(
-                    user_id=user.id,
-                    staff_no=f'STAFF{random.randint(1000, 9999)}',
-                    department=f'Department {random.randint(1, 5)}',
-                    phone=f'071234567{i}',
-
-                )
-                db.session.add(lecturer)
-                lecturers.append(lecturer)        
-                    # Seed Admin
-            elif user.role == 'admin':
-                admins.append(user) #we need user record for admin
-        print(f'Created {len(users)} users, {len(students)} students, {len(lecturers)} lecturers, and {len(admins)} admins.')
-        db.session.commit()       
-        
-        student_ids = [student.id for student in StudentProfile.query.all()]
-        room_objects = Room.query.all()
-
-        # Seed Bookings
-        bookings = []
-        for i in range(20):  # 20 random bookings
-            room = random.choice(room_objects)
-            if room.current_occupancy < room.capacity:
-                booking = StudentRoomBooking(
-                    student_id=random.choice(student_ids),
-                    room_id=room.id,
-                    start_date=datetime.utcnow(),
-                    end_date=datetime.utcnow() + timedelta(days=90),
-                    status=random.choice(['pending', 'approved', 'rejected'])
-                )
-                db.session.add(booking)
-                room.current_occupancy += 1
-                bookings.append(booking)
-        db.session.commit()
-        print(f'Added {len(bookings)} bookings.')
-
-        # Seed Fee Structures
-        fee_structures = []
-        for program_id in range(1, 12):
-            fee_structure = FeeStructure(
-                program=f'Program {program_id}',
-                amount=random.randint(20000, 100000),
-            )
-            db.session.add(fee_structure)
-            db.session.flush() #get fee_structursemesters = Semester.query.all() 
-            fee_structures.append(fee_structure)           
-        print(f'Added {len(fee_structures)} fee structures.')
-        # Seed Semesters
-        for fee_structure in fee_structures:
-            for semester_num in range(1, 12):
-                start_date = datetime.utcnow() + timedelta(days=semester_num * 30)
-                end_date = start_date + timedelta(days=90) #assume semester is 3 months
-
-                semester = Semester(
-                    name=f'Semester {semester_num}',
-                    start_date=start_date,
-                    end_date=end_date,
-                    fee_structure_id=fee_structure.id
-                )
-                db.session.add(semester)
-                fee_structure.semesters.append(semester)
-        db.session.commit()
-        print(f'Seeded sucessfully {len(fee_structures)} semesters.')
-        
-        # Seed Payments
-        payments = []
-        for i in range(50):  # 50 random payments
-            fee_structure = random.choice(fee_structures)
-            payment = Payment(
-                student_id=random.choice(student_ids),
-                fee_structure_id=fee_structure.id,
-                amount_paid=random.randint(1000, fee_structure.amount),
-                payment_date=datetime.utcnow(),
-                payment_method=random.choice(['credit_card', 'debit_card', 'Mpesa']),
-                receipt_number=f'TXN{random.randint(100000, 999999)}',
-                payment_status=random.choice(['success', 'pending'])
-            )
-            try:
                 db.session.add(payment)
-                payments.append(payment)
-            except Exception as e:
-                db.session.rollback()
-                print(f"Error adding payment: {e}")
-        db.session.commit()
-        print(f'Payment seeded successfully {len(payments)} payments.')
+    db.session.commit()
 
-        # Seed Clearance Statuses
-        clearance_statuses = []
-        for student_id in student_ids:
-            clearance_status = FeeClearance(
-                student_id=student_id,
-                hostel_clearance=random.choice([True, False]),
-                fee_clearance=random.choice([True, False]),        
-                status=random.choice(['pending', 'approved', 'rejected'])
+# Seed Fee Clearance
+def seed_fee_clearance():
+    for student in StudentProfile.query.all():
+        fee_clearance = FeeClearance(
+            student_id=student.id,
+            cleared_on=random_date(datetime(2025, 1, 1), datetime(2025, 12, 31)),
+            status=random.choice(['Cleared', 'Pending'])
+        )
+        db.session.add(fee_clearance)
+    db.session.commit()
+
+# Seed Document Requests
+def seed_document_requests():
+    for student in StudentProfile.query.all():
+        if random.choice([True, False]):
+            document_request = DocumentRequest(
+                student_id=student.user_id,
+                document_type=random.choice(['Transcript', 'Certificate', 'Letter']),
+                file_name=f'{student.reg_no}_document.pdf',
+                file_path=f'/documents/{student.reg_no}_document.pdf'
             )
-            db.session.add(clearance_status)
-            clearance_statuses.append(clearance_status)
+            db.session.add(document_request)
+    db.session.commit()
+
+def seed_data():
+    with app.app_context():  # Ensure the app context is active
         try:
-            db.session.commit()
+            print("Starting to seed data...")  # Initial print statement to show the script is running
+            db.create_all()  # Create tables
+            print("Tables created.")
+            
+            seed_users()
+            print("Users seeded.")
+            
+            seed_semesters()
+            print("Semesters seeded.")
+            
+            seed_courses()
+            print("Courses seeded.")
+            
+            seed_lecturers()
+            print("Lecturers seeded.")
+            
+            seed_student_profiles()
+            print("Student profiles seeded.")
+            
+            seed_unit_registrations()
+            print("Unit registrations seeded.")
+            
+            seed_grades()
+            print("Grades seeded.")
+            
+            seed_announcements()
+            print("Announcements seeded.")
+            
+            seed_hostels()
+            print("Hostels seeded.")
+            
+            seed_rooms()
+            print("Rooms seeded.")
+            
+            seed_fee_structures()
+            print("Fee structures seeded.")
+            
+            seed_payments()
+            print("Payments seeded.")
+            
+            seed_fee_clearance()
+            print("Fee clearance seeded.")
+            
+            seed_document_requests()
+            print("Document requests seeded.")
+            
+            print("Database seeded successfully!")  # Success message after all seeding
+            
+        except IntegrityError as e:
+            db.session.rollback()
+            print(f"Integrity Error: {e}")
         except Exception as e:
             db.session.rollback()
-            print(f"Error committing clearance statuses: {e}")
-
-        print(f'Seeding completed successfully {len(clearance_statuses)} clearance statuses.')
-
-        # Seed Audit Logs
-        #predefined actions
-        actions = ['created', 'updated permissions', 'deleted','login','logout','viewed','password changed']
-        users = User.query.all()
-        if not users:
-            print("No users found to create audit logs.")
-            exit()
-        for i in range(100):
-            user = random.choice(users)
-            action = random.choice(actions)
-            timestamp = datetime.utcnow() - timedelta(days=random.randint(1, 30))
-            audit_log = AuditLog(
-                user_id=user.id,
-                action=action,
-                timestamp=timestamp,
-                details=f'User {user.name} {action} at {timestamp}'              
-            )
-            db.session.add(audit_log)
-        db.session.commit()
-        print(f'Generated {len(users)} audit logs for the last 30 days.')
-
-        #course registration
-       
-        # Fetch existing semesters
-        semesters = Semester.query.all()
-
-        if not semesters:
-            print("⚠️ Please seed the Semester table before running this script.")
-        else:
-            #
-            programs = ['Computer Science', 'Mathematics', 'Engineering', 'Physics', 'Biology', 'Chemistry', 'Economics']
-            course_records = []
-
-            for i in range(100):
-                code =f"C{i+1001}" # Generate a unique code
-                title = f"Course {i+1001}"
-                description = f"Description for course {i+1001}"
-                program = random.choice(programs)
-                semester_id = random.choice(semesters).id
-
-                courses = Course(
-                    code=code,
-                    title=title,
-                    description=description,
-                    program=program,
-                    semester_id=semester_id
-                
-                )
-                course_records.append(courses)
-
-            db.session.add_all(course_records)
-            db.session.commit()
-
-            print(f" Seeded {len(course_records)} courses.")
-
-                
-
-                #unit registration
-
-            #fetch existing student,courses, and semester
-            students= StudentProfile.query.all()
-            courses = Course.query.all()
-            semesters = Semester.query.all()
-            if not students or not courses or not semester:
-                print ("please capture StudentProfile . Courses, and Sememster tables first before running this script")
-            else: unit_registrations =[]
-
-            for i in range (100):
-                registration = UnitRegistration(
-                    student_id = random.choice(students).id,
-                    course_id = random.choice(courses).id,
-                    semester_id = random.choice(semesters).id,
-                    registered_on = datetime.utcnow()
-                ) 
-                unit_registrations.append(registration)
-            db.session.add_all(unit_registrations)
-            db.session.commit()
-            print(f"Added {len(unit_registrations)} units") 
-
-        #Announcement
-        sample_titles = [
-            "New System Update",
-            "Important Announcement",
-            "Upcoming Event",
-            "Urgent: Action Required",
-            "Weekly News Update",
-            "New Policy Implementation",
-            "System Downtime Notice",
-            "Employee of the Month Announcement",
-            "Important Deadline Reminder",
-            "Companywide Meeting"
-        ]
-
-        sample_contents = [
-            "We are pleased to announce the launch of our new system, which provides a more efficient and user-friendly experience for our users.",
-            "This is an important announcement that requires immediate attention from all employees.",
-            "We are hosting an event this week, so please make sure to attend.",
-            "This is an urgent announcement that requires immediate action from all employees.",
-            "We have a weekly news update to share with all employees.",
-            "We are implementing a new policy that requires all employees to adhere to.",
-            "The system is currently down for maintenance, and we apologize for any inconvenience caused.",
-            "This is an announcement celebrating the employee of the month.",
-            "This is an important deadline reminder that requires immediate action from all employees.",
-        ]
-
-        announcements =[
-            Announcement(title=random.choice(sample_titles), 
-                content=random.choice(sample_contents),
-                date_posted=datetime.utcnow(),
-                posted_by_id=user.id
-            ) for user in users
-        ]
-
-        print(f"Seeding completed for {len(announcements)} announcements.")
-
-        #Document Requests
-        document_types =["Transcript",
-            "Enrollment Certificate",
-            "Graduation Letter",
-            "Recommendation Letter",
-            "Fee Clearance",
-            "ID Replacement",
-            "Course Completion Certificate",
-            "Others"
-        ]
-        statuses = ["Pending", "Approved", "Rejected"]
-
-        DocumentRequest.query.delete()
-        users = User.query.all()
-        student_profiles = StudentProfile.query.all()
-        if not users or not student_profiles:
-            print("No users or student profiles found to create document requests.")
-            exit()
-        else:
-            requests =[]
-            for i in range(100):
-                user = random.choice(users)
-                student_profile = random.choice(student_profiles)
-
-                requested_on = datetime.utcnow() - timedelta(days=random.randint(0, 30))
-                processed_on = requested_on + timedelta(days=random.randint(1, 10)) if random.choice([True, False]) else None
-
-                request = DocumentRequest(
-                    user_id=user.id,
-                    student_id=student_profile.id,
-                    document_type=random.choice(document_types),
-                    status=random.choice(statuses),
-                    requested_on=requested_on,
-                    processed_on=processed_on
-                )
-                requests.append(request)
-
-        db.session.bulk_save_objects(requests)
-        db.session.commit()
-        print(f"Seeded {len(requests)} documents requests.")
-    
-       
-
-        
-
-
-
-
-
-    print("The entire Seeding file worked for all fields!")
-
-if __name__ == '__main__':
-    seed()
+            print(f"Error: {e}")

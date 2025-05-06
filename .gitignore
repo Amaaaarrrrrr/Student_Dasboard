@@ -1,32 +1,41 @@
-# Node modules and React build
+# React: Node modules and build files
 Client/node_modules/
 Client/build/
 Client/.env
 
-# Logs and system files
-*.log
-.DS_Store
-Thumbs.db
-
-# Python cache and virtual environments
+# Flask: Python cache, environments, and instance-specific files
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.so
 .env
+.env/
 .venv/
 venv/
-
-# Flask migrations and settings
 instance/
 *.sqlite3
+*.db
+*.db-journal
+*.pid
 
-# Bytecode/machine files
-*.so
+# Flask Migrations
+Server/migrations/versions/__pycache__/
 
-# VS Code and other IDEs
+# Coverage and testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Logs and system files
+*.log
+*.bak
+*.swp
+*~
+.DS_Store
+ehthumbs.db
+Thumbs.db
+
+# IDE/editor settings
 .vscode/
 .idea/
-
-# OS-specific
-ehthumbs.db

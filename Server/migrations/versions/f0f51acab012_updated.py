@@ -1,8 +1,8 @@
-"""fix foreign key reference to courses table
+"""updated
 
-Revision ID: 3cb35a1fbede
+Revision ID: f0f51acab012
 Revises: 
-Create Date: 2025-05-03 03:58:33.632125
+Create Date: 2025-05-06 19:57:24.440522
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '3cb35a1fbede'
+revision = 'f0f51acab012'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -43,7 +43,7 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
     sa.Column('email', sa.String(length=120), nullable=False),
-    sa.Column('password_hash', sa.String(length=128), nullable=False),
+    sa.Column('password_hash', sa.String(length=256), nullable=False),
     sa.Column('role', sa.String(length=50), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email')
@@ -66,16 +66,6 @@ def upgrade():
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_table('courses',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('code', sa.String(length=10), nullable=False),
-    sa.Column('title', sa.String(length=100), nullable=False),
-    sa.Column('description', sa.String(length=200), nullable=True),
-    sa.Column('semester_id', sa.Integer(), nullable=False),
-    sa.Column('program', sa.String(length=50), nullable=False),
-    sa.ForeignKeyConstraint(['semester_id'], ['semesters.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
     op.create_table('document_request',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('student_id', sa.Integer(), nullable=False),
@@ -83,6 +73,8 @@ def upgrade():
     sa.Column('status', sa.String(length=50), nullable=True),
     sa.Column('requested_on', sa.DateTime(), nullable=True),
     sa.Column('processed_on', sa.DateTime(), nullable=True),
+    sa.Column('file_name', sa.String(length=255), nullable=True),
+    sa.Column('file_path', sa.String(length=255), nullable=True),
     sa.ForeignKeyConstraint(['student_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -116,11 +108,17 @@ def upgrade():
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('reg_no')
     )
-    op.create_table('course_prerequisites',
-    sa.Column('course_id', sa.Integer(), nullable=True),
-    sa.Column('prerequisite_id', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ),
-    sa.ForeignKeyConstraint(['prerequisite_id'], ['courses.id'], )
+    op.create_table('courses',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('code', sa.String(length=10), nullable=False),
+    sa.Column('title', sa.String(length=100), nullable=False),
+    sa.Column('description', sa.String(length=200), nullable=True),
+    sa.Column('semester_id', sa.Integer(), nullable=False),
+    sa.Column('program', sa.String(length=50), nullable=False),
+    sa.Column('lecturer_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['lecturer_id'], ['lecturer_profiles.id'], ),
+    sa.ForeignKeyConstraint(['semester_id'], ['semesters.id'], ),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('fee_clearances',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -128,18 +126,6 @@ def upgrade():
     sa.Column('cleared_on', sa.DateTime(), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=True),
     sa.ForeignKeyConstraint(['student_id'], ['student_profiles.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_table('grade',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('student_id', sa.Integer(), nullable=False),
-    sa.Column('course_id', sa.Integer(), nullable=False),
-    sa.Column('grade', sa.String(length=2), nullable=False),
-    sa.Column('semester_id', sa.Integer(), nullable=False),
-    sa.Column('date_posted', sa.DateTime(), nullable=True),
-    sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ),
-    sa.ForeignKeyConstraint(['semester_id'], ['semesters.id'], ),
-    sa.ForeignKeyConstraint(['student_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('payments',
@@ -164,6 +150,24 @@ def upgrade():
     sa.ForeignKeyConstraint(['student_id'], ['student_profiles.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('course_prerequisites',
+    sa.Column('course_id', sa.Integer(), nullable=True),
+    sa.Column('prerequisite_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ),
+    sa.ForeignKeyConstraint(['prerequisite_id'], ['courses.id'], )
+    )
+    op.create_table('grade',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('student_id', sa.Integer(), nullable=False),
+    sa.Column('course_id', sa.Integer(), nullable=False),
+    sa.Column('grade', sa.String(length=2), nullable=False),
+    sa.Column('semester_id', sa.Integer(), nullable=False),
+    sa.Column('date_posted', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ),
+    sa.ForeignKeyConstraint(['semester_id'], ['semesters.id'], ),
+    sa.ForeignKeyConstraint(['student_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('unit_registrations',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('student_id', sa.Integer(), nullable=False),
@@ -175,30 +179,22 @@ def upgrade():
     sa.ForeignKeyConstraint(['student_id'], ['student_profiles.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.drop_table('user')
     # ### end Alembic commands ###
 
 
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
-    op.create_table('user',
-    sa.Column('id', sa.INTEGER(), autoincrement=True, nullable=False),
-    sa.Column('name', sa.VARCHAR(length=80), autoincrement=False, nullable=False),
-    sa.Column('email', sa.VARCHAR(length=120), autoincrement=False, nullable=False),
-    sa.PrimaryKeyConstraint('id', name='user_pkey'),
-    sa.UniqueConstraint('email', name='user_email_key')
-    )
     op.drop_table('unit_registrations')
+    op.drop_table('grade')
+    op.drop_table('course_prerequisites')
     op.drop_table('student_room_bookings')
     op.drop_table('payments')
-    op.drop_table('grade')
     op.drop_table('fee_clearances')
-    op.drop_table('course_prerequisites')
+    op.drop_table('courses')
     op.drop_table('student_profiles')
     op.drop_table('rooms')
     op.drop_table('lecturer_profiles')
     op.drop_table('document_request')
-    op.drop_table('courses')
     op.drop_table('audit_log')
     op.drop_table('announcement')
     op.drop_table('users')
