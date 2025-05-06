@@ -33,10 +33,7 @@ const Login = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    navigate('/login'); // Redirect to login page after logout
-  };
+  
 
   return (
     <div>
@@ -63,7 +60,9 @@ const Login = () => {
         {error && <p>{error}</p>}
         <button type="submit">Login</button>
       </form>
-      <button onClick={handleLogout}>Logout</button>
+      <p>
+        Don't have an account? <a href="/register">Register</a>
+      </p>
     </div>
   );
 };
