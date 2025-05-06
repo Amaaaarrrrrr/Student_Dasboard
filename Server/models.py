@@ -171,7 +171,6 @@ class UnitRegistration(db.Model):
     __tablename__ = 'unit_registrations'
 
     id = db.Column(db.Integer, primary_key=True)
-    reg_no = db.Column(db.string(50), db)
     student_id = db.Column(db.Integer, db.ForeignKey('student_profiles.id'), nullable=False)
     course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
     semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id'), nullable=False)
