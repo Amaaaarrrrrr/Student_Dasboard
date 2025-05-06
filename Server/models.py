@@ -87,13 +87,13 @@ class LecturerProfile(db.Model):
     phone = db.Column(db.String(20))
 
     user = db.relationship('User', back_populates='lecturer_profile')
+    courses = db.relationship('Course', back_populates='lecturer')  # NEW
 
     serialize_rules = ('id', 'staff_no', 'department', 'phone')
 
     def to_dict(self, rules=()):
         rules = rules or self.serialize_rules
         return {field: getattr(self, field) for field in rules}
-
 
 # -------------------- Course Model --------------------
 
@@ -106,11 +106,15 @@ class Course(db.Model):
     description = db.Column(db.String(200))
     semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id'), nullable=False)
     program = db.Column(db.String(50), nullable=False)
-    grades = db.relationship('Grade', back_populates='course')
 
+    lecturer_id = db.Column(db.Integer, db.ForeignKey('lecturer_profiles.id'))  # NEW
 
+    lecturer = db.relationship('LecturerProfile', back_populates='courses')     # NEW
     semester = db.relationship('Semester', back_populates='courses')
+    grades = db.relationship('Grade', back_populates='course')
     unit_registrations = db.relationship('UnitRegistration', back_populates='course')
+
+    # Prerequisite logic (unchanged)
     prerequisites = db.relationship(
         'Course',
         secondary='course_prerequisites',
@@ -125,13 +129,15 @@ class Course(db.Model):
         secondaryjoin='Course.id==course_prerequisites.c.course_id',
         back_populates='prerequisites'
     )
-   
 
-    serialize_rules = ('id', 'code', 'title', 'description', 'semester_id', 'program')
+    serialize_rules = ('id', 'code', 'title', 'description', 'semester_id', 'program', 'lecturer_id')
 
     def to_dict(self, rules=()):
         rules = rules or self.serialize_rules
-        return {field: getattr(self, field) for field in rules}
+        course_dict = {field: getattr(self, field) for field in rules}
+        if 'lecturer' in rules and self.lecturer:
+            course_dict['lecturer'] = self.lecturer.to_dict()
+        return course_dict
 
 
 # -------------------- Semester Model --------------------

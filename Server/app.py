@@ -153,6 +153,51 @@ api.add_resource(AdminDashboard, '/api/admin_dashboard')
 def home():
     return "Welcome to the Student Portal!"
 
+@app.route('/api/students', methods=['GET'])
+@jwt_required()
+def get_all_students():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    # Fetch all student profiles
+    student_profiles = StudentProfile.query.all()
+    students_data = []
+    
+    for student in student_profiles:
+        student_info = student.to_dict()
+        # Include linked user info (like name, email)
+        student_info['user'] = student.user.to_dict(rules=('id', 'name', 'email', 'role'))
+        students_data.append(student_info)
+
+    return jsonify({"students": students_data}), 200
+
+
+@app.route('/api/lecturers', methods=['GET'])
+@jwt_required()
+def get_all_lecturers():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    # Fetch all lecturer profiles
+    lecturer_profiles = LecturerProfile.query.all()
+    lecturers_data = []
+    
+    for lecturer in lecturer_profiles:
+        lecturer_info = lecturer.to_dict()
+        # Include linked user info (like name, email)
+        lecturer_info['user'] = lecturer.user.to_dict(rules=('id', 'name', 'email', 'role'))
+        lecturers_data.append(lecturer_info)
+
+    return jsonify({"lecturers": lecturers_data}), 200
+
 @app.route('/api/courses', methods=['GET'])
 def get_courses():
     semester_id = request.args.get('semester_id', type=int)
@@ -174,6 +219,96 @@ def get_courses():
         'program': c.program
     } for c in courses])
 
+@app.route('/api/courses/<int:course_id>', methods=['PUT'])
+@role_required('admin') 
+def update_course(course_id):
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({'error': 'Course not found'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Missing JSON body'}), 400
+
+    course.code = data.get('code', course.code)
+    course.title = data.get('title', course.title)
+    course.description = data.get('description', course.description)
+    course.semester_id = data.get('semester_id', course.semester_id)
+    course.program = data.get('program', course.program)
+
+    try:
+        db.session.commit()
+        return jsonify(course.to_dict()), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to update course', 'details': str(e)}), 500
+
+
+@app.route('/api/courses/<int:course_id>', methods=['DELETE'])
+@role_required('admin') 
+def delete_course(course_id):
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({'error': 'Course not found'}), 404
+
+    try:
+        db.session.delete(course)
+        db.session.commit()
+        return jsonify({'message': f'Course {course_id} deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete course', 'details': str(e)}), 500
+
+@app.route('/api/courses', methods=['POST'])
+@role_required('admin')  # Your decorator to ensure only admins can access      
+def create_course():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Missing JSON body'}), 400
+
+    code = data.get('code')
+    title = data.get('title')
+    description = data.get('description')
+    semester_id = data.get('semester_id')
+    program = data.get('program')
+
+    if not all([code, title, semester_id, program]):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    course = Course(
+        code=code,
+        title=title,
+        description=description,
+        semester_id=semester_id,
+        program=program
+    )
+
+    try:
+        db.session.add(course)
+        db.session.commit()
+        return jsonify(course.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to create course', 'details': str(e)}), 500
+
+@app.route('/admin/assign_lecturer', methods=['POST'])
+@role_required('admin')  # Your decorator to ensure only admins can access
+def assign_lecturer_to_course():
+    data = request.get_json()
+    course_id = data.get('course_id')
+    lecturer_id = data.get('lecturer_id')
+
+    course = Course.query.get(course_id)
+    lecturer = LecturerProfile.query.get(lecturer_id)
+
+    if not course or not lecturer:
+        return jsonify({'error': 'Invalid course or lecturer ID'}), 404
+
+    course.lecturer_id = lecturer.id
+    db.session.commit()
+
+    return jsonify({'message': 'Lecturer assigned successfully', 'course': course.to_dict()})
+
 @app.route('/api/semesters/active', methods=['GET'])
 def get_active_semester():
     active_semester = Semester.query.filter_by(active=True).first()
@@ -187,6 +322,87 @@ def get_active_semester():
         'end_date': active_semester.end_date.isoformat(),
         'active': active_semester.active
     })
+
+@app.route('/api/semesters', methods=['POST'])
+@jwt_required()
+def create_semester():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    data = request.get_json()
+
+    # Validate input data
+    try:
+        name = data['name']
+        start_date = datetime.strptime(data['start_date'], "%Y-%m-%dT%H:%M:%S")
+        end_date = datetime.strptime(data['end_date'], "%Y-%m-%dT%H:%M:%S")
+        active = data['active']
+    except KeyError as e:
+        return jsonify({"message": f"Missing key: {str(e)}"}), 400
+    except ValueError:
+        return jsonify({"message": "Invalid date format, use 'YYYY-MM-DDTHH:MM:SS'"}), 400
+
+    new_semester = Semester(
+        name=name,
+        start_date=start_date,
+        end_date=end_date,
+        active=active
+    )
+
+    db.session.add(new_semester)
+    db.session.commit()
+
+    return jsonify({"message": "Semester created successfully", "semester": new_semester.to_dict()}), 201
+@app.route('/api/semesters/<int:id>', methods=['PUT'])
+@jwt_required()
+def update_semester(id):
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    semester = Semester.query.get(id)
+    if not semester:
+        return jsonify({"message": "Semester not found"}), 404
+
+    data = request.get_json()
+
+    # Update semester attributes
+    semester.name = data.get('name', semester.name)
+    semester.start_date = datetime.strptime(data.get('start_date', semester.start_date.isoformat()), "%Y-%m-%dT%H:%M:%S")
+    semester.end_date = datetime.strptime(data.get('end_date', semester.end_date.isoformat()), "%Y-%m-%dT%H:%M:%S")
+    semester.active = data.get('active', semester.active)
+
+    db.session.commit()
+
+    return jsonify({"message": "Semester updated successfully", "semester": semester.to_dict()}), 200
+
+@app.route('/api/semesters/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_semester(id):
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    semester = Semester.query.get(id)
+    if not semester:
+        return jsonify({"message": "Semester not found"}), 404
+
+    # Deleting the semester
+    db.session.delete(semester)
+    db.session.commit()
+
+    return jsonify({"message": "Semester deleted successfully"}), 200
+
 
 @app.route('/api/registration', methods=['GET', 'POST', 'DELETE'])
 @jwt_required()

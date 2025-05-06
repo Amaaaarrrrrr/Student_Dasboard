@@ -1,24 +1,32 @@
-# Logs
-logs
+# Node modules and React build
+Client/node_modules/
+Client/build/
+Client/.env
+
+# Logs and system files
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+
+# Flask migrations and settings
+instance/
+*.sqlite3
+
+# Bytecode/machine files
+*.so
+
+# VS Code and other IDEs
+.vscode/
+.idea/
+
+# OS-specific
+ehthumbs.db
