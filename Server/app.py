@@ -5,19 +5,21 @@ from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_jwt_extended import (
     JWTManager, create_access_token,
-    jwt_required, get_jwt_identity, get_jwt
+    jwt_required, get_jwt_identity
 )
 from flask_cors import CORS
 from datetime import timedelta
 from functools import wraps
-
-from models import db, User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration,Grade, Announcement, AuditLog, DocumentRequest
+from sqlalchemy.exc import SQLAlchemyError
+from datetime import datetime
+from models import db, User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration,Grade, Announcement, AuditLog, DocumentRequest, Hostel, Room, StudentRoomBooking, FeeStructure, Payment, FeeClearance
+from dotenv import load_dotenv
 
 # Flask App Config
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
-    "postgresql://dashboard:dashboardpass@localhost:5432/student_portal"
+    "postgresql://dashboard:Student@localhost:5432/student_portal"
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_updated_secret_key_here')
@@ -25,83 +27,13 @@ app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'super-secret-jw
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
 
 # Initialize Extensions
+load_dotenv()
 db.init_app(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)
 api = Api(app)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-
-# -------------------- JWT Error Handlers --------------------
-
-@jwt.unauthorized_loader
-def unauthorized_callback(callback):
-    return jsonify({"error": "Missing Authorization Header"}), 401
-@jwt.expired_token_loader
-def expired_token_callback(callback):
-    return jsonify({"error": "Token has expired"}), 401
-@jwt.invalid_token_loader
-def invalid_token_callback(callback):
-    return jsonify({"error": "Invalid token"}), 401
-@jwt.needs_fresh_token_loader
-def fresh_token_callback(callback):
-    return jsonify({"error": "Fresh token required"}), 401
-@jwt.revoked_token_loader
-def revoked_token_callback(callback):
-    return jsonify({"error": "Token has been revoked"}), 401
-@jwt.user_identity_loader
-def user_identity_lookup(user):
-    return user.id
-@jwt.user_claims_loader
-def add_claims_to_access_token(user):
-    return {
-        'role': user.role,
-        'name': user.name,
-        'email': user.email
-    }
-@jwt.user_loader_callback_loader
-def user_loader_callback(identity):
-    user = User.query.get(identity)
-    if not user:
-        return None
-    return user
-@jwt.token_in_blocklist_loader
-def check_if_token_revoked(jwt_header, jwt_payload):
-    jti = jwt_payload['jti']
-    token = TokenBlacklist.query.filter_by(jti=jti).first()
-    if token:
-        return True
-    return False
-# -------------------- Token Blacklist Model --------------------
-class TokenBlacklist(db.Model):
-    __tablename__ = 'token_blacklist'
-    id = db.Column(db.Integer, primary_key=True)
-    jti = db.Column(db.String(36), unique=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-
-    def __repr__(self):
-        return f"<TokenBlacklist {self.jti}>"
-# -------------------- Token Blacklist Resource --------------------
-class TokenBlacklistResource(Resource):
-    @jwt_required()
-    def post(self):
-        jti = get_jwt()['jti']
-        token = TokenBlacklist(jti=jti)
-        db.session.add(token)
-        db.session.commit()
-        return jsonify({"message": "Token blacklisted"}), 200
-
-    @jwt_required()
-    def delete(self):
-        jti = get_jwt()['jti']
-        token = TokenBlacklist.query.filter_by(jti=jti).first()
-        if not token:
-            return jsonify({"error": "Token not found"}), 404
-        db.session.delete(token)
-        db.session.commit()
-        return jsonify({"message": "Token removed from blacklist"}), 200
-# Register TokenBlacklistResource
-api.add_resource(TokenBlacklistResource, '/api/token_blacklist')
 
 
 # -------------------- Role-Based Access Decorator --------------------
@@ -124,48 +56,56 @@ def role_required(role):
 # -------------------- Auth Resources --------------------
 class Register(Resource):
     def post(self):
-        data = request.get_json()
-        name = data.get('name')
-        email = data.get('email')
-        password = data.get('password')
-        role = data.get('role')
+        try:
+            data = request.get_json()
+            name = data.get('name')
+            email = data.get('email')
+            password = data.get('password')
+            role = data.get('role')
 
-        if not all([name, email, password, role]):
-            return {"error": "Missing required fields"}, 400
-        if role not in ['student', 'lecturer', 'admin']:
-            return {"error": "Invalid role"}, 400
-        if User.query.filter_by(email=email).first():
-            return {"error": "Email already registered"}, 409
+            if not all([name, email, password, role]):
+                return {"error": "Missing required fields"}, 400
 
-        user = User(name=name, email=email, role=role)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.flush()
+            if User.query.filter_by(email=email).first():
+                return {"error": "Email already registered"}, 409
 
-        profile_data = data.get(f"{role}_profile", {})
+            user = User(name=name, email=email, role=role)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.flush()
 
-        if role == 'student':
-            student_profile = StudentProfile(
-                user_id=user.id,
-                reg_no=profile_data.get('reg_no'),
-                program=profile_data.get('program'),
-                year_of_study=profile_data.get('year_of_study'),
-                phone=profile_data.get('phone')
-            )
-            db.session.add(student_profile)
-        elif role == 'lecturer':
-            lecturer_profile = LecturerProfile(
-                user_id=user.id,
-                staff_no=profile_data.get('staff_no'),
-                department=profile_data.get('department'),
-                phone=profile_data.get('phone')
-            )
-            db.session.add(lecturer_profile)
+            profile_data = data.get(f"{role}_profile", {})
+            if role == 'student':
+                student_profile = StudentProfile(
+                    user_id=user.id,
+                    reg_no=profile_data.get('reg_no'),
+                    program=profile_data.get('program'),
+                    year_of_study=profile_data.get('year_of_study'),
+                    phone=profile_data.get('phone')
+                )
+                db.session.add(student_profile)
+                db.session.commit()  
+                print(f"Student profile created with ID: {student_profile.id}")
+            elif role == 'lecturer':
+                lecturer_profile = LecturerProfile(
+                    user_id=user.id,
+                    staff_no=profile_data.get('staff_no'),
+                    department=profile_data.get('department'),
+                    phone=profile_data.get('phone')
+                )
+                db.session.add(lecturer_profile)
 
-        db.session.commit()
-        return {"message": "User registered successfully"}, 201
-
+            db.session.commit()
+            return {"message": "User registered successfully"}, 201
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            print(f"Database error: {str(e)}")
+            return {"error": "Internal server error"}, 500
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
+            return {"error": "Internal server error"}, 500
 class Login(Resource):
+   
     def post(self):
         data = request.get_json()
         email = data.get('email')
@@ -190,6 +130,7 @@ class Login(Resource):
         }, 200
 
 class Profile(Resource):
+    
     @jwt_required()
     def get(self):
         user = User.query.get(get_jwt_identity())
@@ -203,10 +144,60 @@ class AdminDashboard(Resource):
     def get(self):
         return {"message": "Welcome to the Admin Dashboard!"}, 200
 
+# -------------------- Resource Routes --------------------
+api.add_resource(Register, '/api/register')
+api.add_resource(Login, '/api/login')
+api.add_resource(Profile, '/api/profile')
+api.add_resource(AdminDashboard, '/api/admin_dashboard')
 # -------------------- API Endpoints --------------------
 @app.route('/')
 def home():
     return "Welcome to the Student Portal!"
+
+@app.route('/api/students', methods=['GET'])
+@jwt_required()
+def get_all_students():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    # Fetch all student profiles
+    student_profiles = StudentProfile.query.all()
+    students_data = []
+    
+    for student in student_profiles:
+        student_info = student.to_dict()
+        # Include linked user info (like name, email)
+        student_info['user'] = student.user.to_dict(rules=('id', 'name', 'email', 'role'))
+        students_data.append(student_info)
+
+    return jsonify({"students": students_data}), 200
+
+
+@app.route('/api/lecturers', methods=['GET'])
+@jwt_required()
+def get_all_lecturers():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    # Fetch all lecturer profiles
+    lecturer_profiles = LecturerProfile.query.all()
+    lecturers_data = []
+    
+    for lecturer in lecturer_profiles:
+        lecturer_info = lecturer.to_dict()
+        # Include linked user info (like name, email)
+        lecturer_info['user'] = lecturer.user.to_dict(rules=('id', 'name', 'email', 'role'))
+        lecturers_data.append(lecturer_info)
+
+    return jsonify({"lecturers": lecturers_data}), 200
 
 @app.route('/api/courses', methods=['GET'])
 def get_courses():
@@ -229,6 +220,96 @@ def get_courses():
         'program': c.program
     } for c in courses])
 
+@app.route('/api/courses/<int:course_id>', methods=['PUT'])
+@role_required('admin') 
+def update_course(course_id):
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({'error': 'Course not found'}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Missing JSON body'}), 400
+
+    course.code = data.get('code', course.code)
+    course.title = data.get('title', course.title)
+    course.description = data.get('description', course.description)
+    course.semester_id = data.get('semester_id', course.semester_id)
+    course.program = data.get('program', course.program)
+
+    try:
+        db.session.commit()
+        return jsonify(course.to_dict()), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to update course', 'details': str(e)}), 500
+
+
+@app.route('/api/courses/<int:course_id>', methods=['DELETE'])
+@role_required('admin') 
+def delete_course(course_id):
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({'error': 'Course not found'}), 404
+
+    try:
+        db.session.delete(course)
+        db.session.commit()
+        return jsonify({'message': f'Course {course_id} deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete course', 'details': str(e)}), 500
+
+@app.route('/api/courses', methods=['POST'])
+@role_required('admin')  # Your decorator to ensure only admins can access      
+def create_course():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Missing JSON body'}), 400
+
+    code = data.get('code')
+    title = data.get('title')
+    description = data.get('description')
+    semester_id = data.get('semester_id')
+    program = data.get('program')
+
+    if not all([code, title, semester_id, program]):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    course = Course(
+        code=code,
+        title=title,
+        description=description,
+        semester_id=semester_id,
+        program=program
+    )
+
+    try:
+        db.session.add(course)
+        db.session.commit()
+        return jsonify(course.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to create course', 'details': str(e)}), 500
+
+@app.route('/admin/assign_lecturer', methods=['POST'])
+@role_required('admin')  # Your decorator to ensure only admins can access
+def assign_lecturer_to_course():
+    data = request.get_json()
+    course_id = data.get('course_id')
+    lecturer_id = data.get('lecturer_id')
+
+    course = Course.query.get(course_id)
+    lecturer = LecturerProfile.query.get(lecturer_id)
+
+    if not course or not lecturer:
+        return jsonify({'error': 'Invalid course or lecturer ID'}), 404
+
+    course.lecturer_id = lecturer.id
+    db.session.commit()
+
+    return jsonify({'message': 'Lecturer assigned successfully', 'course': course.to_dict()})
+
 @app.route('/api/semesters/active', methods=['GET'])
 def get_active_semester():
     active_semester = Semester.query.filter_by(active=True).first()
@@ -243,44 +324,124 @@ def get_active_semester():
         'active': active_semester.active
     })
 
+@app.route('/api/semesters', methods=['POST'])
+@jwt_required()
+def create_semester():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    data = request.get_json()
+
+    # Validate input data
+    try:
+        name = data['name']
+        start_date = datetime.strptime(data['start_date'], "%Y-%m-%dT%H:%M:%S")
+        end_date = datetime.strptime(data['end_date'], "%Y-%m-%dT%H:%M:%S")
+        active = data['active']
+    except KeyError as e:
+        return jsonify({"message": f"Missing key: {str(e)}"}), 400
+    except ValueError:
+        return jsonify({"message": "Invalid date format, use 'YYYY-MM-DDTHH:MM:SS'"}), 400
+
+    new_semester = Semester(
+        name=name,
+        start_date=start_date,
+        end_date=end_date,
+        active=active
+    )
+
+    db.session.add(new_semester)
+    db.session.commit()
+
+    return jsonify({"message": "Semester created successfully", "semester": new_semester.to_dict()}), 201
+@app.route('/api/semesters/<int:id>', methods=['PUT'])
+@jwt_required()
+def update_semester(id):
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    semester = Semester.query.get(id)
+    if not semester:
+        return jsonify({"message": "Semester not found"}), 404
+
+    data = request.get_json()
+
+    # Update semester attributes
+    semester.name = data.get('name', semester.name)
+    semester.start_date = datetime.strptime(data.get('start_date', semester.start_date.isoformat()), "%Y-%m-%dT%H:%M:%S")
+    semester.end_date = datetime.strptime(data.get('end_date', semester.end_date.isoformat()), "%Y-%m-%dT%H:%M:%S")
+    semester.active = data.get('active', semester.active)
+
+    db.session.commit()
+
+    return jsonify({"message": "Semester updated successfully", "semester": semester.to_dict()}), 200
+
+@app.route('/api/semesters/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_semester(id):
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Only allow access if current user is an admin
+    if not current_user or current_user.role != 'admin':
+        return jsonify({"message": "Access denied"}), 403
+
+    semester = Semester.query.get(id)
+    if not semester:
+        return jsonify({"message": "Semester not found"}), 404
+
+    # Deleting the semester
+    db.session.delete(semester)
+    db.session.commit()
+
+    return jsonify({"message": "Semester deleted successfully"}), 200
+
+
 @app.route('/api/registration', methods=['GET', 'POST', 'DELETE'])
 @jwt_required()
 def registration():
-    student_id = request.args.get('student_id') or request.get_json(silent=True, force=True).get('student_id')
-    if not student_id:
-        return jsonify({'error': 'student_id is required'}), 400
+    # Get the current user's ID from the JWT token
+    current_user_id = get_jwt_identity()
 
-    if request.method == 'GET':
-        registrations = UnitRegistration.query.filter_by(student_id=student_id).all()
-        return jsonify([{
-            'id': reg.id,
-            'student_id': reg.student_id,
-            'course_id': reg.course_id,
-            'course_code': reg.course.code,
-            'course_title': reg.course.title,
-            'semester_id': reg.semester_id,
-            'registered_on': reg.registered_on.isoformat()
-        } for reg in registrations])
+    # Ensure the current user has a student profile
+    student_profile = StudentProfile.query.filter_by(user_id=current_user_id).first()
+    if not student_profile:
+        return jsonify({'error': 'Student profile not found'}), 404
 
-    elif request.method == 'POST':
+    if request.method == 'POST':
         data = request.get_json()
-        course_id = data.get('course_id')
+        course_code = data.get('course_code')  # Expecting course_code instead of course_id
         semester_id = data.get('semester_id')
 
-        if not all([student_id, course_id, semester_id]):
-            return jsonify({'error': 'student_id, course_id, and semester_id are required'}), 400
+        if not all([course_code, semester_id]):
+            return jsonify({'error': 'course_code and semester_id are required'}), 400
 
-        if UnitRegistration.is_already_registered(student_id, course_id, semester_id):
-            return jsonify({'error': 'Already registered for this course in the semester'}), 400
-
-        course = Course.query.get(course_id)
+        # Resolve course_id from course_code
+        course = Course.query.filter_by(code=course_code).first()
         if not course:
             return jsonify({'error': 'Course not found'}), 404
-        if not UnitRegistration.check_prerequisites_met(student_id, course):
+
+        course_id = course.id
+
+        # Check if already registered
+        if UnitRegistration.query.filter_by(student_id=student_profile.id, course_id=course_id, semester_id=semester_id).first():
+            return jsonify({'error': 'Already registered for this course in the semester'}), 400
+
+        # Check prerequisites
+        if not UnitRegistration.check_prerequisites_met(student_profile.id, course):
             return jsonify({'error': 'Prerequisites not met'}), 400
 
+        # Create the registration
         registration = UnitRegistration(
-            student_id=student_id,
+            student_id=student_profile.id,  # Use the student_profile.id here
             course_id=course_id,
             semester_id=semester_id
         )
@@ -289,27 +450,31 @@ def registration():
 
         return jsonify({'message': 'Registration successful', 'registration_id': registration.id}), 201
 
+    elif request.method == 'GET':
+        # Fetch all registrations for the current student
+        registrations = UnitRegistration.query.filter_by(student_id=student_profile.id).all()
+        return jsonify([{
+            'id': reg.id,
+            'course_code': reg.course.code,
+            'course_title': reg.course.title,
+            'semester_id': reg.semester_id,
+            'registered_on': reg.registered_on.isoformat()
+        } for reg in registrations]), 200
+
     elif request.method == 'DELETE':
         data = request.get_json()
         registration_id = data.get('registration_id')
 
         if not registration_id:
-            return jsonify({'error': 'registration_id is required'}), 400
+            return jsonify({'error': 'Registration ID is required'}), 400
 
-        registration = UnitRegistration.query.filter_by(id=registration_id, student_id=student_id).first()
+        registration = UnitRegistration.query.filter_by(id=registration_id, student_id=student_profile.id).first()
         if not registration:
             return jsonify({'error': 'Registration not found'}), 404
 
         db.session.delete(registration)
         db.session.commit()
-        return jsonify({'message': 'Deregistration successful'})
-
-# -------------------- Resource Routes --------------------
-api.add_resource(Register, '/api/register')
-api.add_resource(Login, '/api/login')
-api.add_resource(Profile, '/api/profile')
-api.add_resource(AdminDashboard, '/api/admin_dashboard')
-
+        return jsonify({'message': 'Registration deleted successfully'}), 200
 # -------------------- Grades Resource --------------------
 @app.route('/api/grades', methods=['GET', 'POST'])
 @jwt_required()
@@ -425,8 +590,8 @@ def audit_logs():
 @jwt_required()
 def document_requests():
     if request.method == 'GET':
-        student_id = get_jwt_identity()
-        requests = DocumentRequest.query.filter_by(student_id=student_id).all()
+        current_user_id = get_jwt_identity()
+        requests = DocumentRequest.query.filter_by(student_id=current_user_id).all()
         return jsonify([{
             'document_type': req.document_type,
             'status': req.status,
@@ -1130,20 +1295,20 @@ def update_clearance_status(student_id):
     if not clearance_status:
         return jsonify({'success': False, 'message': 'Clearance status not found'}), 404
 
-            data = request.get_json()
+    data = request.get_json()
+    
+    # Only update what's in the model
+    if 'status' in data:
+        clearance_status.status = data['status']
+    
+    if 'cleared_on' in data:
+        try:
+            clearance_status.cleared_on = datetime.fromisoformat(data['cleared_on'])
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format'}), 400
 
-            # Update clearance fields
-            clearance_status.hostel_clearance = data.get('hostel_clearance', clearance_status.hostel_clearance)
-            clearance_status.fee_clearance = data.get('fee_clearance', clearance_status.fee_clearance)
-            clearance_status.library_clearance = data.get('library_clearance', clearance_status.library_clearance)
-            clearance_status.sports_clearance = data.get('sports_clearance', clearance_status.sports_clearance)
-            clearance_status.lab_clearance = data.get('lab_clearance', clearance_status.lab_clearance)
-            clearance_status.status = data.get('status', clearance_status.status)
-            clearance_status.remarks = data.get('remarks', clearance_status.remarks)
-
-            db.session.commit()
-
-            return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
+    db.session.commit()
+    return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
 
         except SQLAlchemyError as e:
             db.session.rollback()
