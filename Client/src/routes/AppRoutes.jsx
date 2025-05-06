@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
+
+// this code is in app.jsx also
 const DocumentRequestComponent = () => {
   const [formData, setFormData] = useState({
     student_id: '',
