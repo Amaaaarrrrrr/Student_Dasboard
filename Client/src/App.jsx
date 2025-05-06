@@ -24,6 +24,7 @@ import './components/Shared/Navbar.css';
 function App() {
   return (
     <Router>
+      <AppRoutes />
       <AnnouncementBanner />
       <Navbar />
       <Routes>
