@@ -1,0 +1,32 @@
+# Node modules and React build
+Client/node_modules/
+Client/build/
+Client/.env
+
+# Logs and system files
+*.log
+.DS_Store
+Thumbs.db
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+
+# Flask migrations and settings
+instance/
+*.sqlite3
+
+# Bytecode/machine files
+*.so
+
+# VS Code and other IDEs
+.vscode/
+.idea/
+
+# OS-specific
+ehthumbs.db
