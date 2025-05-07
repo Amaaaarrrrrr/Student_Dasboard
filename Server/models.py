@@ -273,7 +273,7 @@ class Announcement(db.Model):
             'date_posted': self.date_posted.isoformat() if self.date_posted else None,
             'posted_by': self.posted_by.name
         }
-
+ 
 
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
