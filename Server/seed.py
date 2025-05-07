@@ -117,7 +117,7 @@ def create_semesters():
     return semesters
 
 def create_courses(semesters):
-    """Create courses for each semester"""
+    """Create courses, each assigned to a random semester"""
     print("Creating courses...")
 
     lecturer_profiles = db.session.query(LecturerProfile).all()
@@ -128,26 +128,40 @@ def create_courses(semesters):
         {"code": "BUS101", "title": "Intro to Business", "program": "Business Administration"},
         {"code": "ENG101", "title": "Engineering Fundamentals", "program": "Engineering"},
         {"code": "MED101", "title": "Human Anatomy", "program": "Medicine"},
-        {"code": "ART101", "title": "Intro to Literature", "program": "Arts"}
+        {"code": "ART101", "title": "Intro to Literature", "program": "Arts"},
+        {"code": "ART201", "title": "Art History", "program": "Arts"},
+        {"code": "ART301", "title": "Art Appreciation", "program": "Arts"},
+        {"code":"CS102", "title": "Advanced Computer Science", "program": "Computer Science"},
+        {"code":"BUS102", "title": "Advanced Business", "program": "Business Administration"},
+        {"code":"ENG102", "title": "Advanced Engineering", "program": "Engineering"},
+        {"code":"MED102", "title": "Advanced Medicine", "program": "Medicine"},
+        {"code":"ART102", "title": "Advanced Literature", "program": "Arts"},
+        {"code":"ART202", "title": "Advanced Art History", "program": "Arts"},
+        {"code":"ART302", "title": "Advanced Art Appreciation", "program": "Arts"},
+        
+
+
+
     ]
 
     all_courses = []
 
-    for semester in semesters:
-        for course_data in courses_data:
-            matching_lecturers = [lp for lp in lecturer_profiles if lp.department == course_data["program"]]
-            lecturer_id = random.choice(matching_lecturers).id if matching_lecturers else None
+    for course_data in courses_data:
+        semester = random.choice(semesters)  # assign randomly (or set explicitly)
 
-            course = Course(
-                code=course_data["code"],
-                title=course_data["title"],
-                description=f"Description for {course_data['title']}",
-                semester_id=semester.id,
-                program=course_data["program"],
-                lecturer_id=lecturer_id
-            )
-            db.session.add(course)
-            all_courses.append(course)
+        matching_lecturers = [lp for lp in lecturer_profiles if lp.department == course_data["program"]]
+        lecturer_id = random.choice(matching_lecturers).id if matching_lecturers else None
+
+        course = Course(
+            code=course_data["code"],
+            title=course_data["title"],
+            description=f"Description for {course_data['title']}",
+            semester_id=semester.id,
+            program=course_data["program"],
+            lecturer_id=lecturer_id
+        )
+        db.session.add(course)
+        all_courses.append(course)
 
     db.session.commit()
     print("Courses created successfully.")
