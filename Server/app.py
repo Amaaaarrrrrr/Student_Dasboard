@@ -554,8 +554,9 @@ def grades():
         return jsonify({'message': 'Grade deleted successfully'})
 
 # -------------------- Announcements Resource --------------------
+
 @app.route('/api/announcements', methods=['GET', 'POST'])
-@role_required('admin')
+@jwt_required(optional=True)
 def announcements():
     if request.method == 'GET':
         announcements = Announcement.query.all()
@@ -567,10 +568,17 @@ def announcements():
         } for a in announcements])
 
     elif request.method == 'POST':
+        current_user_id = get_jwt_identity()
+        if not current_user_id:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        user = User.query.get(current_user_id)
+        if user.role not in ['admin', 'lecturer']:
+            return jsonify({'error': 'Only admins and lecturers can post announcements'}), 403
+
         data = request.get_json()
         title = data.get('title')
         content = data.get('content')
-        posted_by_id = get_jwt_identity()
 
         if not all([title, content]):
             return jsonify({'error': 'Title and content are required'}), 400
@@ -578,11 +586,25 @@ def announcements():
         announcement = Announcement(
             title=title,
             content=content,
-            posted_by_id=posted_by_id
+            posted_by_id=current_user_id
         )
         db.session.add(announcement)
         db.session.commit()
         return jsonify({'message': 'Announcement posted successfully'}), 201
+@app.route('/api/announcements/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_announcement(id):
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+
+    if user.role not in ['admin', 'lecturer']:
+        return jsonify({'error': 'Only admins and lecturers can delete announcements'}), 403
+
+    announcement = Announcement.query.get_or_404(id)
+    db.session.delete(announcement)
+    db.session.commit()
+    return jsonify({'message': 'Announcement deleted'}), 200
+
 # -------------------- Audit Logs Resource --------------------
 @app.route('/api/audit_logs', methods=['GET'])
 @role_required('admin')
