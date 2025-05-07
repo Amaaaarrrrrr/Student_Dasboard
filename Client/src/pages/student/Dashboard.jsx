@@ -6,7 +6,7 @@ const Dashboard = () => {
 
   return (
     <div>
-      <h1>Student Dashboard</h1>
+      <h1> Dashboard</h1>
       <p>Welcome to your student Portal!!</p>
 
       <button onClick={() => navigate('/profile')}>Profile</button>
