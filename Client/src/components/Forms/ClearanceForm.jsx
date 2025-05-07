@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const ClearanceForm = () => {
@@ -10,6 +10,40 @@ const ClearanceForm = () => {
   const [remarks, setRemarks] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState(null);
+  const [token, setToken] = useState('');
+
+  // Check token and fetch clearance status on load
+  useEffect(() => {
+    const savedToken = localStorage.getItem('accessToken');
+    if (!savedToken) {
+      alert('No access token found! Please log in.');
+    } else {
+      console.log('Access token loaded:', savedToken);
+      setToken(savedToken);
+      fetchClearanceStatus(savedToken);
+    }
+  }, []);
+
+  const fetchClearanceStatus = async (savedToken) => {
+    try {
+      const response = await axios.get('http://127.0.0.1:5000/api/clearance', {
+        headers: {
+          Authorization: `Bearer ${savedToken}`,
+        },
+      });
+      console.log('Fetched clearance status:', response.data);
+      const data = response.data.data;
+      setName(data.name || '');
+      setStudentId(data.student_id || '');
+      setDepartment(data.department || '');
+      setClearanceStatus(data.clearance_status || '');
+      setRemarks(data.remarks || '');
+      // Optionally handle the uploaded file display if your backend provides it
+    } catch (err) {
+      console.error('Error fetching clearance status:', err);
+      setError('Failed to fetch clearance status.');
+    }
+  };
 
   const handleFileChange = (event) => {
     setUploadedFile(event.target.files[0]);
@@ -37,10 +71,12 @@ const ClearanceForm = () => {
       const response = await axios.post('http://127.0.0.1:5000/api/clearance', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${token}`,
         },
       });
 
       setIsSubmitted(true);
+      setError(null);
       console.log('Form submitted:', response.data);
     } catch (err) {
       setError('There was an error submitting the form.');

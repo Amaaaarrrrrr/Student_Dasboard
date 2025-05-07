@@ -10,7 +10,7 @@ __pycache__/
 *.pyd
 *.so
 .env
-.env/
+.env
 .venv/
 venv/
 instance/
