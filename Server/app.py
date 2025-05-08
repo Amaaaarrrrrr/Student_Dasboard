@@ -42,7 +42,8 @@ db.init_app(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)
 api = Api(app)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, supports_credentials=True, origins=['http://localhost:5173'])
+
 
 
 
@@ -126,7 +127,7 @@ class Login(Resource):
             return {"error": "Invalid credentials"}, 401
 
         access_token = create_access_token(identity=user.id)
-        redirect_url = f'/{user.role}_dashboard' if user.role in ['student', 'lecturer', 'admin'] else '/'
+        redirect_url = f'/{user.role}/dashboard' if user.role in ['student', 'lecturer', 'admin'] else '/'
 
         return {
             "access_token": access_token,
@@ -630,12 +631,12 @@ def handle_document_requests():
     user = User.query.get(current_user_id)
 
     if request.method == 'GET':
-        if not user or user.role != 'admin':
-            return jsonify({'error': 'Access denied'}), 403
-
-        requests = DocumentRequest.query.all()
+        # Get only the current user's document requests
+        requests = DocumentRequest.query.filter_by(student_id=current_user_id).all()
         return jsonify([req.to_dict() for req in requests]), 200
+
     elif request.method == 'POST':
+        # Post a new document request for the current user
         data = request.get_json()
         document_type = data.get('document_type')
 
@@ -651,6 +652,7 @@ def handle_document_requests():
         return jsonify({'message': 'Document request submitted successfully'}), 201
 
     elif request.method == 'DELETE':
+        # Delete a specific document request of the current user
         data = request.get_json()
         request_id = data.get('request_id')
         if not request_id:
