@@ -122,11 +122,17 @@ class Login(Resource):
         email = data.get('email')
         password = data.get('password')
 
+        # Find user by email
         user = User.query.filter_by(email=email).first()
+
+        # If no user found or password is incorrect, return error
         if not user or not user.check_password(password):
             return {"error": "Invalid credentials"}, 401
 
-        access_token = create_access_token(identity=user.id)
+        # Create JWT token with optional expiration
+        access_token = create_access_token(identity=user.id, expires_delta=timedelta(days=1))
+
+        # Define a role-based redirect URL
         redirect_url = f'/{user.role}/dashboard' if user.role in ['student', 'lecturer', 'admin'] else '/'
 
         return {

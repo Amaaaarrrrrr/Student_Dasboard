@@ -4,7 +4,8 @@ const Sidebar = ({ role }) => {
   const links = {
     student: [
       { to: "/student/dashboard", label: "Dashboard" },
-      { to: "/student/units", label: "Units" },
+      { to: "/student/profile", label: "Profile" },
+      { to: "/student/unit-registration", label: "Unit Registration" },
       { to: "/student/accommodation", label: "Accommodation" },
       { to: "/student/fees", label: "Fees" },
       { to: "/student/Announcement", label: "Announcement" },
