@@ -154,18 +154,38 @@ class Profile(Resource):
         if not user:
             return {"error": "User not found"}, 404
         return user.to_dict(rules=('-password_hash', 'student_profile', 'lecturer_profile')), 200
-
-# -------------------- Admin Resource --------------------
-class AdminDashboard(Resource):
-    @role_required('admin')
-    def get(self):
-        return {"message": "Welcome to the Admin Dashboard!"}, 200
-
-# -------------------- Resource Routes --------------------
-api.add_resource(Register, '/api/register')
-api.add_resource(Login, '/api/login')
-api.add_resource(Profile, '/api/profile')
-api.add_resource(AdminDashboard, '/api/admin_dashboard')
+    
+    @jwt_required()
+    def put(self):
+        user = User.query.get(get_jwt_identity())
+        if not user:
+            return {"error": "User not found"}, 404
+        
+        # Assuming the incoming data is in JSON format and contains the profile fields you want to update
+        data = request.get_json()
+        # Update the user's profile fields (modify based on your model)
+        user.name = data.get("name", user.name)
+        user.email = data.get("email", user.email)
+        # Add more fields as necessary
+        
+        try:
+            user.save()  # Assuming your User model has a save method to commit changes
+            return {"message": "Profile updated successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 400
+    
+    @jwt_required()
+    def delete(self):
+        user = User.query.get(get_jwt_identity())
+        if not user:
+            return {"error": "User not found"}, 404
+        
+        try:
+            # Delete user account (make sure to handle related data properly)
+            user.delete()  # Assuming your User model has a delete method
+            return {"message": "Profile deleted successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 400
 # -------------------- API Endpoints --------------------
 @app.route('/')
 def home():
@@ -177,8 +197,8 @@ def get_all_students():
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
 
-    # Only allow access if current user is an admin
-    if not current_user or current_user.role != 'admin':
+    # Allow access to both admins and lecturers
+    if not current_user or current_user.role not in ['admin', 'lecturer']:
         return jsonify({"message": "Access denied"}), 403
 
     # Fetch all student profiles
@@ -192,6 +212,7 @@ def get_all_students():
         students_data.append(student_info)
 
     return jsonify({"students": students_data}), 200
+
 
 
 @app.route('/api/lecturers', methods=['GET'])
