@@ -29,7 +29,20 @@ class User(db.Model):
     announcements = db.relationship('Announcement', back_populates='posted_by')
     audit_logs = db.relationship('AuditLog', back_populates='user')
     document_requests = db.relationship('DocumentRequest', back_populates='student')
+    
+     # Relationship for assignments where the user is the lecturer
+    assignments = db.relationship(
+        'Assignment',
+        back_populates='lecturer',
+        foreign_keys='Assignment.lecturer_id'
+    )
 
+    # Relationship for assignments submitted by the user
+    submitted_assignments = db.relationship(
+        'Assignment',
+        back_populates='submitted_by',
+        foreign_keys='Assignment.submitted_by_id'
+    )
     serialize_rules = ('id', 'name', 'email', 'role')
 
     def set_password(self, password):
@@ -337,7 +350,6 @@ class Hostel(db.Model):
         rules = rules or self.serialize_rules
         return {field: getattr(self, field) for field in rules}
 
-
 class Room(db.Model):
     __tablename__ = 'rooms'
 
@@ -346,6 +358,7 @@ class Room(db.Model):
     room_number = db.Column(db.String(20), nullable=False)
     bed_count = db.Column(db.Integer, nullable=False)
     price_per_bed = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(50), default='Available')
 
     hostel = db.relationship('Hostel', back_populates='rooms')
     student_bookings = db.relationship('StudentRoomBooking', back_populates='room')
@@ -459,4 +472,31 @@ class FeeClearance(db.Model):
             'student_id': self.student_id,
             'cleared_on': self.cleared_on.isoformat() if self.cleared_on else None,
             'status': self.status
+        }
+class Assignment(db.Model):
+    __tablename__ = 'assignments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    due_date = db.Column(db.DateTime, nullable=False)
+
+    # Foreign key for lecturer_id (the person who assigned the task)
+    lecturer_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    lecturer = db.relationship('User', back_populates='assignments', foreign_keys=[lecturer_id])
+
+    # Foreign key for submitted_by_id (the person who submitted the task)
+    submitted_by_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    submitted_by = db.relationship('User', back_populates='submitted_assignments', foreign_keys=[submitted_by_id])
+
+    serialize_rules = ('id', 'title', 'description', 'due_date', 'lecturer_id')
+
+    def to_dict(self, rules=()):
+        rules = rules or self.serialize_rules
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'due_date': self.due_date.isoformat() if self.due_date else None,
+            'lecturer_id': self.lecturer_id,
         }

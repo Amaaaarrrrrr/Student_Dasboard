@@ -21,7 +21,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import (
     db, User, StudentProfile, LecturerProfile, Course, Semester, 
     UnitRegistration, Grade, Announcement, AuditLog, DocumentRequest,
-    Hostel, Room, StudentRoomBooking, FeeStructure, Payment, FeeClearance
+    Hostel, Room, StudentRoomBooking, FeeStructure, Payment, FeeClearance, Assignment
 )
 
 # Load environment variables
@@ -312,7 +312,7 @@ def seed_rooms(rooms_per_hostel=10):
 
     for hostel in hostels:
         for i in range(rooms_per_hostel):
-            room_number = f"{hostel.id}-{i+1:03d}"  # e.g., 1-001, 1-002
+            room_number = f"{hostel.id}-{i+1:03d}"  
             bed_count = random.randint(1, 6)
             price_per_bed = round(random.uniform(50, 200), 2)
 
@@ -320,7 +320,8 @@ def seed_rooms(rooms_per_hostel=10):
                 hostel_id=hostel.id,
                 room_number=room_number,
                 bed_count=bed_count,
-                price_per_bed=price_per_bed
+                price_per_bed=price_per_bed,
+                status= random.choice(['Available', 'Occupied','Booked'])  
             )
 
             db.session.add(room)
@@ -394,7 +395,49 @@ def seed_fee_structures(num_entries=20):
 
     db.session.commit()
     print(f"Seeded {num_entries} fee structures.")
+    try:
+            assignments_data = [
+                {
+                    'title': 'Math Assignment 1',
+                    'description': 'Solve problems 1-10 on page 42.',
+                    'due_date': '2025-05-15'
+                },
+                {
+                    'title': 'Physics Project',
+                    'description': 'Build a model rocket.',
+                    'due_date': '2025-05-20'
+                },
+                {
+                    'title': 'History Essay',
+                    'description': 'Write a 3-page essay on World War II.',
+                    'due_date': '2025-05-18'
+                }
+            ]
 
+            for data in assignments_data:
+                title = data.get('title')
+                description = data.get('description')
+                due_date = data.get('due_date')
+
+                # Parse due_date
+                due_date_parsed = datetime.strptime(due_date, '%Y-%m-%d')
+
+                new_assignment = Assignment(
+                    title=title,
+                    description=description,
+                    due_date=due_date_parsed
+                )
+
+                db.session.add(new_assignment)
+
+            db.session.commit()
+            print(f" {len(assignments_data)} assignments seeded successfully.")
+
+    except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"❌ Error seeding assignments: {e}")
+                
     #payments
 def seed_payments(num_entries=30):
     # Get existing students and fee structures
@@ -503,6 +546,51 @@ def seed_audit_logs(num_entries=50):
 
     db.session.commit()
     print(f" Seeded {num_entries} audit logs successfully!")
+
+    #assignments
+def seed_assignments():
+    try:
+        assignments_data = [
+            {
+                'title': 'Math Assignment 1',
+                'description': 'Solve problems 1-10 on page 42.',
+                'due_date': '2025-05-15'
+            },
+            {
+                'title': 'Physics Project',
+                'description': 'Build a model rocket.',
+                'due_date': '2025-05-20'
+            },
+            {
+                'title': 'History Essay',
+                'description': 'Write a 3-page essay on World War II.',
+                'due_date': '2025-05-18'
+            }
+        ]
+
+        for data in assignments_data:
+            title = data.get('title')
+            description = data.get('description')
+            due_date = data.get('due_date')
+
+            # Parse due_date
+            due_date_parsed = datetime.strptime(due_date, '%Y-%m-%d')
+
+            new_assignment = Assignment(
+                title=title,
+                description=description,
+                due_date=due_date_parsed
+            )
+
+            db.session.add(new_assignment)
+
+        db.session.commit()
+        print(f"✅ {len(assignments_data)} assignments seeded successfully.")
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"❌ Error seeding assignments: {e}")
             
    
 if __name__ == "__main__":
