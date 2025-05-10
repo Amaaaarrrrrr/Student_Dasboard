@@ -1,11 +1,6 @@
 import os
-from datetime import timedelta, datetime
-from functools import wraps
-from werkzeug.utils import secure_filename
-from dotenv import load_dotenv
-
-from flask import Flask, request, jsonify, send_from_directory
-from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import SQLAlchemyError
+from flask import Flask, request, jsonify,send_from_directory
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_jwt_extended import (
@@ -13,23 +8,19 @@ from flask_jwt_extended import (
     jwt_required, get_jwt_identity
 )
 from flask_cors import CORS
+from datetime import timedelta
+from functools import wraps
 from sqlalchemy.exc import SQLAlchemyError
+from datetime import datetime
+from models import db, User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration,Grade, Announcement, AuditLog, DocumentRequest, Hostel, Room, StudentRoomBooking, FeeStructure, Payment, FeeClearance
+from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
 
-from models import (
-    db, User, StudentProfile, LecturerProfile,
-    Course, Semester, UnitRegistration, Grade,
-    Announcement, AuditLog, DocumentRequest,
-    Hostel, Room, StudentRoomBooking,
-    FeeStructure, Payment, FeeClearance
-)
 
-# Load .env variables
-load_dotenv()
 
-# Initialize Flask app
+
+# Flask App Config
 app = Flask(__name__)
-
-# App Config
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
     "postgresql://dashboard:Student@localhost:5432/student_portal"
@@ -38,32 +29,25 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_updated_secret_key_here')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'super-secret-jwt-key')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
-
-# File upload config
 basedir = os.path.abspath(os.path.dirname(__file__))
 UPLOAD_FOLDER = os.path.join(basedir, 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Create the folder if it doesn't exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Initialize extensions
+# Initialize Extensions
+load_dotenv()
 db.init_app(app)
 migrate = Migrate(app, db)
-api = Api(app)
 jwt = JWTManager(app)
+api = Api(app)
 CORS(app, supports_credentials=True, origins=['http://localhost:5173'])
 
-# JWT error handlers
-@jwt.invalid_token_loader
-def invalid_token_callback(error):
-    return jsonify({"error": "Invalid token"}), 422
 
-@jwt.unauthorized_loader
-def missing_token_callback(error):
-    return jsonify({"error": "Authorization header missing"}), 401
 
-@jwt.expired_token_loader
-def expired_token_callback(jwt_header, jwt_payload):
-    return jsonify({"error": "Token expired"}), 40
+
+
 # -------------------- Role-Based Access Decorator --------------------
 def role_required(role):
     def wrapper(fn):
@@ -123,6 +107,7 @@ class Register(Resource):
                 )
                 db.session.add(lecturer_profile)
 
+
             db.session.commit()
             return {"message": "User registered successfully"}, 201
         except SQLAlchemyError as e:
@@ -171,18 +156,38 @@ class Profile(Resource):
         if not user:
             return {"error": "User not found"}, 404
         return user.to_dict(rules=('-password_hash', 'student_profile', 'lecturer_profile')), 200
-
-# -------------------- Admin Resource --------------------
-class AdminDashboard(Resource):
-    @role_required('admin')
-    def get(self):
-        return {"message": "Welcome to the Admin Dashboard!"}, 200
-
-# -------------------- Resource Routes --------------------
-api.add_resource(Register, '/api/register')
-api.add_resource(Login, '/api/login')
-api.add_resource(Profile, '/api/profile')
-api.add_resource(AdminDashboard, '/api/admin_dashboard')
+    
+    @jwt_required()
+    def put(self):
+        user = User.query.get(get_jwt_identity())
+        if not user:
+            return {"error": "User not found"}, 404
+        
+        # Assuming the incoming data is in JSON format and contains the profile fields you want to update
+        data = request.get_json()
+        # Update the user's profile fields (modify based on your model)
+        user.name = data.get("name", user.name)
+        user.email = data.get("email", user.email)
+        # Add more fields as necessary
+        
+        try:
+            user.save()  # Assuming your User model has a save method to commit changes
+            return {"message": "Profile updated successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 400
+    
+    @jwt_required()
+    def delete(self):
+        user = User.query.get(get_jwt_identity())
+        if not user:
+            return {"error": "User not found"}, 404
+        
+        try:
+            # Delete user account (make sure to handle related data properly)
+            user.delete()  # Assuming your User model has a delete method
+            return {"message": "Profile deleted successfully"}, 200
+        except Exception as e:
+            return {"error": str(e)}, 400
 # -------------------- API Endpoints --------------------
 @app.route('/')
 def home():
