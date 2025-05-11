@@ -341,7 +341,7 @@ class Hostel(db.Model):
     name = db.Column(db.String(100), nullable=False)
     location = db.Column(db.String(255), nullable=False)
     capacity = db.Column(db.Integer, nullable=False)
-    rooms = db.relationship('Room', back_populates='hostel')
+    rooms = db.relationship('Room', back_populates='hostel')    
     fee_structures = db.relationship('FeeStructure', back_populates='hostel')
 
     serialize_rules = ('id', 'name', 'location', 'capacity')
@@ -457,6 +457,9 @@ class FeeClearance(db.Model):
     __tablename__ = 'fee_clearances'
 
     id = db.Column(db.Integer, primary_key=True)
+    student_name = db.Column(db.String(100))
+    amount_due = db.Column(db.Float, default=0.0)
+    program = db.Column(db.String(100))
     student_id = db.Column(db.Integer, db.ForeignKey('student_profiles.id'), nullable=False)
     cleared_on = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default='Pending')
@@ -471,7 +474,10 @@ class FeeClearance(db.Model):
             'id': self.id,
             'student_id': self.student_id,
             'cleared_on': self.cleared_on.isoformat() if self.cleared_on else None,
-            'status': self.status
+            'status': self.status,
+            'amount_due': self.amount_due,
+            'student_name': self.student_name
+
         }
 class Assignment(db.Model):
     __tablename__ = 'assignments'

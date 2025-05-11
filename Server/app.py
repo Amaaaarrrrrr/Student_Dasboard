@@ -1,6 +1,6 @@
 import os
 from sqlalchemy.exc import SQLAlchemyError
-from flask import Flask, request, jsonify,send_from_directory
+from flask import Flask, request, jsonify,send_from_directory, Blueprint
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_jwt_extended import (
@@ -8,8 +8,8 @@ from flask_jwt_extended import (
     jwt_required, get_jwt_identity
 )
 
-from flask import Blueprint, jsonify, request
-
+ 
+from sqlalchemy import and_
 from datetime import datetime
 from flask_cors import CORS, cross_origin
 from datetime import timedelta
@@ -187,6 +187,119 @@ api.add_resource(AdminDashboard, '/api/admin_dashboard')
 @app.route('/')
 def home():
     return "Welcome to the Student Portal!"
+#------------------------------------------------------------------------------------------------------------------------------------------------------
+# User Management Routes
+@app.route('/api/users', methods=['GET'])
+@role_required('admin')
+def get_all_users():
+    try:
+        users = User.query.all()
+        users_data = []
+        
+        for user in users:
+            user_data = user.to_dict(rules=('-password_hash',))
+            
+            # Include profile data based on role
+            if user.role == 'student' and user.student_profile:
+                user_data.update(user.student_profile.to_dict())
+            elif user.role == 'lecturer' and user.lecturer_profile:
+                user_data.update(user.lecturer_profile.to_dict())
+                
+            users_data.append(user_data)
+            
+        return jsonify({'users': users_data}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<int:user_id>', methods=['PUT'])
+@role_required('admin')
+def update_user(user_id):
+    try:
+        data = request.get_json()
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+            
+        # Update basic user info
+        if 'name' in data:
+            user.name = data['name']
+        if 'email' in data:
+            if User.query.filter(User.email == data['email'], User.id != user_id).first():
+                return jsonify({'error': 'Email already in use'}), 400
+            user.email = data['email']
+        if 'role' in data:
+            user.role = data['role']
+        if 'password' in data and data['password']:
+            user.set_password(data['password'])
+            
+        # Update profile based on role
+        if user.role == 'student':
+            profile = user.student_profile or StudentProfile(user_id=user.id)
+            if 'reg_no' in data:
+                profile.reg_no = data['reg_no']
+            if 'program' in data:
+                profile.program = data['program']
+            if 'year_of_study' in data:
+                profile.year_of_study = data['year_of_study']
+            if 'phone' in data:
+                profile.phone = data['phone']
+            db.session.add(profile)
+                
+        elif user.role == 'lecturer':
+            profile = user.lecturer_profile or LecturerProfile(user_id=user.id)
+            if 'staff_no' in data:
+                profile.staff_no = data['staff_no']
+            if 'department' in data:
+                profile.department = data['department']
+            if 'phone' in data:
+                profile.phone = data['phone']
+            db.session.add(profile)
+            
+        db.session.commit()
+        return jsonify({'message': 'User updated successfully'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<int:user_id>', methods=['DELETE'])
+@role_required('admin')
+def delete_user(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+            
+        # Delete associated profile first
+        if user.role == 'student' and user.student_profile:
+            db.session.delete(user.student_profile)
+        elif user.role == 'lecturer' and user.lecturer_profile:
+            db.session.delete(user.lecturer_profile)
+            
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'message': 'User deleted successfully'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/programs', methods=['GET'])
+def get_programs():
+    programs = [
+        'Computer Science',
+        'Engineering',
+        'Business',
+        'Medicine',
+        'Law',
+        'Arts',
+        'Science'
+    ]
+    return jsonify({'programs': programs}), 200
+
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------
 
  
 
@@ -675,39 +788,121 @@ def handle_document_requests():
         return jsonify({'message': 'Document request submitted successfully'}), 201 
     # -------------------- Hostel and Room Management --------------------
 
-@app.route('/api/hostels', methods=['GET'])
-def get_hostels():
-    hostels = Hostel.query.all()
-    return jsonify({'hostels': [hostel.to_dict() for hostel in hostels]}), 200
-        
-@app.route('/api/rooms', methods=['GET'])
-def get_rooms():
-    rooms = Room.query.all()
-    return jsonify({'rooms': [room.to_dict() for room in rooms]}), 200
+hostel_bp = Blueprint('hostel', __name__)
 
-@app.route('/api/bookings', methods=['POST', 'OPTIONS'])
-@cross_origin(origin='http://localhost:5173')
+@hostel_bp.route('/api/hostels', methods=['GET'])
+def get_hostels():
+    try:
+        hostels = Hostel.query.all()
+        return jsonify({
+            'hostels': [{
+                'id': hostel.id,
+                'name': hostel.name,
+                'location': hostel.location,
+                'total_rooms': hostel.total_rooms,
+                'status': hostel.status,
+                'created_at': hostel.created_at.isoformat() if hostel.created_at else None
+            } for hostel in hostels]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@hostel_bp.route('/api/rooms', methods=['GET'])
+def get_rooms():
+    try:
+        rooms = Room.query.all()
+        return jsonify({
+            'rooms': [{
+                'id': room.id,
+                'hostel_id': room.hostel_id,
+                'room_number': room.room_number,
+                'capacity': room.capacity,
+                'current_occupants': room.current_occupants,
+                'status': room.status,
+                'created_at': room.created_at.isoformat() if room.created_at else None
+            } for room in rooms]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@hostel_bp.route('/api/bookings', methods=['POST', 'OPTIONS'])
+@cross_origin()
 def create_booking():
     if request.method == 'OPTIONS':
-        return jsonify({}), 200  #  respond to preflight request
+        return jsonify({}), 200
 
-    # Your POST logic here
-    data = request.get_json()
-    return jsonify({'message': 'Booking created successfully'}), 201
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['student_id', 'hostel_id', 'room_id', 'booking_date']
+        if not all(field in data for field in required_fields):
+            return jsonify({'error': 'Missing required fields'}), 400
 
-    # 🟠 This code is unreachable because of the return above
-    hostel = Hostel.query.get(hostel_id)
-    if not hostel:
-        return jsonify({'error': 'Hostel not found'}), 404
+        # Check room availability
+        room = Room.query.get(data['room_id'])
+        if not room:
+            return jsonify({'error': 'Room not found'}), 404
+        
+        if room.status != 'available' or room.current_occupants >= room.capacity:
+            return jsonify({'error': 'Room is not available'}), 400
 
-    room = Room(
-        hostel_id=hostel_id,
-        room_number=room_number,
-        capacity=capacity
-    )
-    db.session.add(room)
-    db.session.commit()
-    return jsonify({'message': 'Room created successfully'}), 201
+        # Create booking
+        booking = Booking(
+            student_id=data['student_id'],
+            hostel_id=data['hostel_id'],
+            room_id=data['room_id'],
+            booking_date=datetime.strptime(data['booking_date'], '%Y-%m-%d'),
+            status='confirmed'
+        )
+        
+        # Update room occupancy
+        room.current_occupants += 1
+        if room.current_occupants >= room.capacity:
+            room.status = 'occupied'
+        
+        db.session.add(booking)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Booking created successfully',
+            'booking_id': booking.id
+        }), 201
+        
+    except ValueError as e:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@hostel_bp.route('/api/hostels/<int:hostel_id>/rooms', methods=['POST'])
+def create_room(hostel_id):
+    try:
+        data = request.get_json()
+        
+        hostel = Hostel.query.get(hostel_id)
+        if not hostel:
+            return jsonify({'error': 'Hostel not found'}), 404
+
+        room = Room(
+            hostel_id=hostel_id,
+            room_number=data['room_number'],
+            capacity=data['capacity'],
+            status='available'
+        )
+        
+        db.session.add(room)
+        hostel.total_rooms += 1
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Room created successfully',
+            'room_id': room.id
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 #POST /api/payments - create a new payment
@@ -729,8 +924,6 @@ def fetch_payments():
         })
 
     return jsonify({'payments': result}), 200
-@app.route('/api/payments', methods=['POST'])
-
 
 grades_bp = Blueprint('grades', __name__, url_prefix='/api/grades')
 
@@ -869,6 +1062,394 @@ def get_active_semesters():
         } for semester in active_semesters]), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+    # Mock database - replace with your actual database operations
+registrations_db = []
+users_db = {
+    "admin@university.edu": {
+        "adminpass": "admin123",
+        "role": "admin"
+    }
+}
+
+@app.route('/api/admin/pending-registrations', methods=['GET'])
+@jwt_required()
+def get_pending_registrations():
+    current_user = get_jwt_identity()
+    
+    # Check if user is admin
+    if users_db.get(current_user, {}).get('role') != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    # Filter pending registrations (status = 'pending')
+    pending_regs = [reg for reg in registrations_db if reg['status'] == 'pending']
+    
+    return jsonify({
+        "registrations": pending_regs
+    })
+
+@app.route('/api/admin/approve-registration/<registration_id>', methods=['PUT'])
+@jwt_required()
+def approve_registration(registration_id):
+    current_user = get_jwt_identity()
+    
+    # Check if user is admin
+    if users_db.get(current_user, {}).get('role') != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    # Find and update registration
+    for reg in registrations_db:
+        if reg['id'] == registration_id:
+            reg['status'] = 'approved'
+            reg['approved_by'] = current_user
+            reg['approved_at'] = datetime.utcnow().isoformat()
+            return jsonify({"message": "Registration approved"})
+        
+    # Find and update registration
+    for reg in registrations_db:
+        if reg['id'] == registration_id:
+            reg['status'] = 'approved'
+            reg['approved_by'] = current_user
+            reg['approved_at'] = datetime.utcnow().isoformat()
+            return jsonify({"message": "Registration approved"})
+    
+    return jsonify({"error": "Registration not found"}), 404
+
+@app.route('/api/admin/reject-registration/<registration_id>', methods=['PUT'])
+@jwt_required()
+def reject_registration(registration_id):
+    current_user = get_jwt_identity()
+    reason = request.json.get('reason')
+    
+    if not reason:
+        return jsonify({"error": "Reason is required"}), 400
+    
+    # Check if user is admin
+    if users_db.get(current_user, {}).get('role') != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    # Find and update registration
+    for reg in registrations_db:
+        if reg['id'] == registration_id:
+            reg['status'] = 'rejected'
+            reg['rejected_by'] = current_user
+            reg['rejected_at'] = datetime.utcnow().isoformat()
+            reg['rejection_reason'] = reason
+            return jsonify({"message": "Registration rejected"})
+    
+    return jsonify({"error": "Registration not found"}), 404
+
+# Sample registration data for testing
+sample_registration = {
+    "id": "reg123",
+    "student_name": "John Doe",
+    "student_email": "john@example.com",
+    "student_id": "STU001",
+    "program_name": "Computer Science",
+    "department": "Engineering",
+    "batch_year": "2023",
+    "submitted_at": datetime.utcnow().isoformat(),
+    "status": "pending"
+}
+registrations_db.append(sample_registration)
+
+
+
+# @app.route('/api/admin/reject-registration/<registration_id>', methods=['PUT'])
+# @jwt_required()
+# def reject_registration(registration_id):
+#     current_user = get_jwt_identity()
+#     reason = request.json.get('reason')
+    
+#     if not reason:
+#         return jsonify({"error": "Reason is required"}), 400
+    
+#     # Check if user is admin
+#     if users_db.get(current_user, {}).get('role') != 'admin':
+#         return jsonify({"error": "Unauthorized"}), 403
+    
+#     # Find and update registration
+#     for reg in registrations_db:
+#         if reg['id'] == registration_id:
+#             reg['status'] = 'rejected'
+#             reg['rejected_by'] = current_user
+#             reg['rejected_at'] = datetime.utcnow().isoformat()
+#             reg['rejection_reason'] = reason
+#             return jsonify({"message": "Registration rejected"})
+    
+#     return jsonify({"error": "Registration not found"}), 404
+
+# Sample registration data for testing
+sample_registration = {
+    "id": "reg123",
+    "student_name": "John Doe",
+    "student_email": "john@example.com",
+    "student_id": "STU001",
+    "program_name": "Computer Science",
+    "department": "Engineering",
+    "batch_year": "2023",
+    "submitted_at": datetime.utcnow().isoformat(),
+    "status": "pending"
+}
+registrations_db.append(sample_registration)
+
+#fee_clearance 
+@app.route('/api/clearance', methods=['GET'])
+def get_clearance_status():
+    # Get student_id from query parameters instead of JWT
+    student_id = request.args.get('student_id')
+    if not student_id:
+        return jsonify({'success': False, 'message': 'Student ID is required'}), 400
+    
+    clearance_status = FeeClearance.query.filter_by(student_id=student_id).first()
+    if clearance_status:
+        return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
+    else:
+        return jsonify({'success': False, 'message': 'Clearance status not found'}), 404
+
+@app.route('/admin/clearance/<int:student_id>', methods=['GET'])
+def change_clearance_status(student_id):
+    clearance_status = FeeClearance.query.filter_by(student_id=student_id).first()
+    if not clearance_status:
+        return jsonify({'success': False, 'message': 'Clearance status not found'}), 404
+    
+    data = request.get_json()
+    
+    # Only update what's in the model
+    if 'status' in data:
+        clearance_status.status = data['status']
+    
+    if 'cleared_on' in data:
+        try:
+            clearance_status.cleared_on = datetime.fromisoformat(data['cleared_on'])
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format'}), 400
+
+    db.session.commit()
+    return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
+    data = request.get_json()
+    
+    # Only update what's in the model
+    if 'status' in data:
+        clearance_status.status = data['status']
+    
+    if 'cleared_on' in data:
+        try:
+            clearance_status.cleared_on = datetime.fromisoformat(data['cleared_on'])
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid date format'}), 400
+
+    db.session.commit()
+    return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
+
+@app.route('/api/admin/clearance', methods=['GET'])
+def get_all_clearance_statuses():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    try:
+        clearances = FeeClearance.query.all()
+        return jsonify({
+            'success': True,
+            'clearances': [{
+                'student_id': c.student_id,
+                'student_name': c.student_name,
+                'program': c.program,
+                'amount_due': c.amount_due,
+                'status': c.status,
+                'cleared_on': c.cleared_on.isoformat() if c.cleared_on else None
+            } for c in clearances]
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/admin/clearance/<int:student_id>', methods=['PUT', 'OPTIONS'])
+def update_clearance_status(student_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    try:
+        clearance = FeeClearance.query.filter_by(student_id=student_id).first()
+        if not clearance:
+            return jsonify({'success': False, 'message': 'Clearance status not found'}), 404
+
+        data = request.get_json()
+        
+        # Update status if provided
+        if 'status' in data:
+            clearance.status = data['status']
+        
+        # Update cleared_on if status is cleared
+        if clearance.status == 'cleared':
+            clearance.cleared_on = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'student_id': clearance.student_id,
+                'status': clearance.status,
+                'cleared_on': clearance.cleared_on.isoformat() if clearance.cleared_on else None
+            }
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({'success': False, 'message': 'Invalid date format'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    
+def create_fee_routes(app):
+
+    # Helper decorator for admin authentication
+    def admin_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Implement your admin authentication logic here
+            # For example, check JWT token or session
+            if not request.headers.get('X-Admin-Auth'):
+                return jsonify({'success': False, 'message': 'Admin access required'}), 403
+            return f(*args, **kwargs)
+        return decorated_function
+
+    @app.route('/api/admin/clearance', methods=['GET'])
+    @admin_required
+    def get_all_clearance_statuses():
+        try:
+            # Get optional query parameters for filtering
+            status_filter = request.args.get('status')
+            search_query = request.args.get('search')
+            
+            query = FeeClearance.query
+            
+            # Apply status filter if provided
+            if status_filter and status_filter != 'all':
+                query = query.filter(FeeClearance.status == status_filter)
+            
+            # Apply search filter if provided
+            if search_query:
+                search = f"%{search_query}%"
+                query = query.filter(
+                    (FeeClearance.student_id.cast(db.String).ilike(search)) |
+                    (FeeClearance.student_name.ilike(search)) |
+                    (FeeClearance.program.ilike(search))
+                )
+            
+            clearances = query.order_by(FeeClearance.student_id).all()
+            
+            return jsonify({
+                'success': True,
+                'clearances': [{
+                    'student_id': c.student_id,
+                    'student_name': c.student_name,
+                    'program': c.program,
+                    'amount_due': float(c.amount_due) if c.amount_due else 0.0,
+                    'status': c.status,
+                    'cleared_on': c.cleared_on.isoformat() if c.cleared_on else None
+                } for c in clearances],
+                'stats': {
+                    'total': len(clearances),
+                    'cleared': len([c for c in clearances if c.status == 'cleared']),
+                    'pending': len([c for c in clearances if c.status == 'pending']),
+                    'flagged': len([c for c in clearances if c.status == 'flagged'])
+                }
+            }), 200
+            
+        except Exception as e:
+            app.logger.error(f"Error fetching clearance data: {str(e)}")
+            return jsonify({'success': False, 'message': 'Error fetching clearance data'}), 500
+
+    @app.route('/admin/clearance/<int:student_id>', methods=['PUT'])
+    @admin_required
+    def update_clearance_status(student_id):
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'success': False, 'message': 'No data provided'}), 400
+            
+            clearance = FeeClearance.query.filter_by(student_id=student_id).first()
+            if not clearance:
+                return jsonify({'success': False, 'message': 'Clearance record not found'}), 404
+            
+            # Update status if provided
+            if 'status' in data:
+                new_status = data['status'].lower()
+                if new_status not in ['cleared', 'pending', 'flagged']:
+                    return jsonify({'success': False, 'message': 'Invalid status value'}), 400
+                
+                clearance.status = new_status
+                
+                # Automatically set cleared_on date when status is set to cleared
+                if new_status == 'cleared' and not clearance.cleared_on:
+                    clearance.cleared_on = datetime.utcnow()
+                elif new_status != 'cleared':
+                    clearance.cleared_on = None
+            
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Clearance status updated successfully',
+                'data': {
+                    'student_id': clearance.student_id,
+                    'status': clearance.status,
+                    'cleared_on': clearance.cleared_on.isoformat() if clearance.cleared_on else None
+                }
+            }), 200
+            
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Error updating clearance status: {str(e)}")
+            return jsonify({'success': False, 'message': 'Error updating clearance status'}), 500
+
+    @app.route('/api/clearance/<int:student_id>', methods=['GET'])
+    def get_clearance_status(student_id):
+        """Public endpoint to check clearance status (used by students)"""
+        try:
+            clearance = FeeClearance.query.filter_by(student_id=student_id).first()
+            if not clearance:
+                return jsonify({'success': False, 'message': 'Clearance record not found'}), 404
+            
+            return jsonify({
+                'success': True,
+                'data': {
+                    'student_id': clearance.student_id,
+                    'student_name': clearance.student_name,
+                    'status': clearance.status,
+                    'amount_due': float(clearance.amount_due) if clearance.amount_due else 0.0,
+                    'cleared_on': clearance.cleared_on.isoformat() if clearance.cleared_on else None
+                }
+            }), 200
+            
+        except Exception as e:
+            app.logger.error(f"Error fetching clearance status: {str(e)}")
+            return jsonify({'success': False, 'message': 'Error fetching clearance status'}), 500
+
+    @app.route('/api/admin/clearance/stats', methods=['GET'])
+    @admin_required
+    def get_clearance_stats():
+        """Endpoint specifically for dashboard statistics"""
+        try:
+            clearances = FeeClearance.query.all()
+            
+            return jsonify({
+                'success': True,
+                'stats': {
+                    'total': len(clearances),
+                    'cleared': len([c for c in clearances if c.status == 'cleared']),
+                    'pending': len([c for c in clearances if c.status == 'pending']),
+                    'flagged': len([c for c in clearances if c.status == 'flagged']),
+                    'total_amount_due': sum(float(c.amount_due) for c in clearances if c.amount_due)
+                }
+            }), 200
+            
+        except Exception as e:
+            app.logger.error(f"Error fetching clearance stats: {str(e)}")
+            return jsonify({'success': False, 'message': 'Error fetching statistics'}), 500
+
+
+
 
 #......................................
 if __name__ == '__main__':
