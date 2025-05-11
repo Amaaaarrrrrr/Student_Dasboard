@@ -75,6 +75,7 @@ class StudentProfile(db.Model):
     __tablename__ = 'student_profiles'
 
     id = db.Column(db.Integer, primary_key=True)
+    name= db.Column(db.String(100))
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     reg_no = db.Column(db.String(50), nullable=False, unique=True)
     program = db.Column(db.String(100), nullable=False)
@@ -523,6 +524,9 @@ class Registration(db.Model):
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default='pending')  # 'pending', 'approved', 'rejected'
     rejection_reason = db.Column(db.Text, nullable=True)
+
+    rejection_reason=db.Column(db.Text)
+
 
     serialize_rules = ('id', 'student_name', 'student_email', 'student_id', 'program_name', 'department', 'batch_year', 'submitted_at', 'status', 'rejection_reason')
 

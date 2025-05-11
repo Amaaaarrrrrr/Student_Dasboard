@@ -304,27 +304,21 @@ def get_programs():
  
 
 @app.route('/api/lecturers', methods=['GET'])
-# @jwt_required()
 def get_all_lecturers():
-    # Comment out security checks
-    # current_user_id = get_jwt_identity()
-    current_user = User.query.get(User)
-
-    # Only allow access if current user is an admin
-    if not current_user or current_user.role != 'admin':
-        return jsonify({"message": "Access denied"}), 403
-
-    # Fetch all lecturer profiles
     lecturer_profiles = LecturerProfile.query.all()
-    lecturers_data = []
-    
-    for lecturer in lecturer_profiles:
-        lecturer_info = lecturer.to_dict()
-        # Include linked user info (like name, email)
-        lecturer_info['user'] = lecturer.user.to_dict(rules=('id', 'name', 'email', 'role'))
-        lecturers_data.append(lecturer_info)
+
+    lecturers_data = [
+        {
+            "id": l.id,
+            "name": l.user.name  # assuming .user exists and has .name
+        } for l in lecturer_profiles
+    ]
+    print(dir(lecturer_profiles[0]))
+
 
     return jsonify({"lecturers": lecturers_data}), 200
+
+
 
 @app.route('/api/courses', methods=['GET'])
 def get_courses():
