@@ -341,7 +341,9 @@ class Hostel(db.Model):
     name = db.Column(db.String(100), nullable=False)
     location = db.Column(db.String(255), nullable=False)
     capacity = db.Column(db.Integer, nullable=False)
-    rooms = db.relationship('Room', back_populates='hostel')    
+    rooms = db.relationship('Room', back_populates='hostel')  
+    status = db.Column(db.String(50), default='Available') 
+    created_at = db.Column(db.DateTime, default=datetime.utcnow) 
     fee_structures = db.relationship('FeeStructure', back_populates='hostel')
 
     serialize_rules = ('id', 'name', 'location', 'capacity')
@@ -357,8 +359,11 @@ class Room(db.Model):
     hostel_id = db.Column(db.Integer, db.ForeignKey('hostels.id'), nullable=False)
     room_number = db.Column(db.String(20), nullable=False)
     bed_count = db.Column(db.Integer, nullable=False)
+    capacity = db.Column(db.Integer)
     price_per_bed = db.Column(db.Float, nullable=False)
+    current_occupants = db.Column(db.Integer, default=0)
     status = db.Column(db.String(50), default='Available')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     hostel = db.relationship('Hostel', back_populates='rooms')
     student_bookings = db.relationship('StudentRoomBooking', back_populates='room')
@@ -506,3 +511,32 @@ class Assignment(db.Model):
             'due_date': self.due_date.isoformat() if self.due_date else None,
             'lecturer_id': self.lecturer_id,
         }
+
+class Registration(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    student_name = db.Column(db.String(100))
+    student_email = db.Column(db.String(120))
+    student_id = db.Column(db.String(20))
+    program_name = db.Column(db.String(100))
+    department = db.Column(db.String(100))
+    batch_year = db.Column(db.String(10))
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+    status = db.Column(db.String(20), default='pending')  # 'pending', 'approved', 'rejected'
+    rejection_reason = db.Column(db.Text, nullable=True)
+
+    serialize_rules = ('id', 'student_name', 'student_email', 'student_id', 'program_name', 'department', 'batch_year', 'submitted_at', 'status', 'rejection_reason')
+
+    def to_dict(self, rules=()):
+        rules = rules or self.serialize_rules
+        return {
+            'id': self.id,
+            'student_name': self.student_name,
+            'student_email': self.student_email,
+            'student_id': self.student_id,
+            'program_name': self.program_name,
+            'department': self.department,
+            'batch_year': self.batch_year,
+            'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None,
+            'status': self.status,
+            'rejection_reason': self.rejection_reason
+        }   

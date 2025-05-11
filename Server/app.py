@@ -16,7 +16,7 @@ from datetime import timedelta
 from functools import wraps
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
-from models import db, User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration,Grade, Announcement, AuditLog, DocumentRequest, Hostel, Room, StudentRoomBooking, FeeStructure, Payment, FeeClearance, Assignment
+from models import db, User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration,Grade, Announcement, AuditLog, DocumentRequest, Hostel, Room, StudentRoomBooking, FeeStructure, Payment, FeeClearance, Assignment, Registration
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 
@@ -190,7 +190,7 @@ def home():
 #------------------------------------------------------------------------------------------------------------------------------------------------------
 # User Management Routes
 @app.route('/api/users', methods=['GET'])
-@role_required('admin')
+# @role_required('admin')
 def get_all_users():
     try:
         users = User.query.all()
@@ -212,7 +212,7 @@ def get_all_users():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<int:user_id>', methods=['PUT'])
-@role_required('admin')
+# @role_required('admin')
 def update_user(user_id):
     try:
         data = request.get_json()
@@ -264,7 +264,7 @@ def update_user(user_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
-@role_required('admin')
+# @role_required('admin')
 def delete_user(user_id):
     try:
         user = User.query.get(user_id)
@@ -308,7 +308,7 @@ def get_programs():
 def get_all_lecturers():
     # Comment out security checks
     # current_user_id = get_jwt_identity()
-    current_user = User.query.get(current_user_id)
+    current_user = User.query.get(User)
 
     # Only allow access if current user is an admin
     if not current_user or current_user.role != 'admin':
@@ -580,7 +580,7 @@ def update_semester(id):
 def delete_semester(id):
     # Comment out security checks
     # current_user_id = get_jwt_identity()
-    current_user = User.query.get(current_user_id)
+    current_user = User.query.get(User)
 
     # Only allow access if current user is an admin
     if not current_user or current_user.role != 'admin':
@@ -790,96 +790,70 @@ def handle_document_requests():
 
 hostel_bp = Blueprint('hostel', __name__)
 
-@hostel_bp.route('/api/hostels', methods=['GET'])
-def get_hostels():
-    try:
-        hostels = Hostel.query.all()
-        return jsonify({
-            'hostels': [{
-                'id': hostel.id,
-                'name': hostel.name,
-                'location': hostel.location,
-                'total_rooms': hostel.total_rooms,
-                'status': hostel.status,
-                'created_at': hostel.created_at.isoformat() if hostel.created_at else None
-            } for hostel in hostels]
-        }), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+# Admin decorator (optional, not active)
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Implement your admin logic here
+        return f(*args, **kwargs)
+    return decorated_function
 
-@hostel_bp.route('/api/rooms', methods=['GET'])
-def get_rooms():
-    try:
-        rooms = Room.query.all()
-        return jsonify({
-            'rooms': [{
-                'id': room.id,
-                'hostel_id': room.hostel_id,
-                'room_number': room.room_number,
-                'capacity': room.capacity,
-                'current_occupants': room.current_occupants,
-                'status': room.status,
-                'created_at': room.created_at.isoformat() if room.created_at else None
-            } for room in rooms]
-        }), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+# === HOSTELS ROUTES ===
+@hostel_bp.route('/api/hostels', methods=['GET', 'POST'])
+def handle_hostels():
+    if request.method == 'GET':
+        try:
+            hostels = Hostel.query.all()
+            return jsonify({
+                'hostels': [{
+                    'id': hostel.id,
+                    'name': hostel.name,
+                    'location': hostel.location,
+                    'total_rooms': hostel.total_rooms,
+                    'status': hostel.status,
+                    'created_at': hostel.created_at.isoformat() if hostel.created_at else None
+                } for hostel in hostels]
+            }), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
-@hostel_bp.route('/api/bookings', methods=['POST', 'OPTIONS'])
-@cross_origin()
-def create_booking():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
 
-    try:
-        data = request.get_json()
-        
-        # Validate required fields
-        required_fields = ['student_id', 'hostel_id', 'room_id', 'booking_date']
-        if not all(field in data for field in required_fields):
-            return jsonify({'error': 'Missing required fields'}), 400
+            required_fields = ['name', 'location']
+            if not all(field in data for field in required_fields):
+                return jsonify({'error': 'Missing required fields'}), 400
 
-        # Check room availability
-        room = Room.query.get(data['room_id'])
-        if not room:
-            return jsonify({'error': 'Room not found'}), 404
-        
-        if room.status != 'available' or room.current_occupants >= room.capacity:
-            return jsonify({'error': 'Room is not available'}), 400
+            hostel = Hostel(
+                name=data['name'],
+                location=data['location'],
+                status=data.get('status', 'active'),
+                total_rooms=0
+            )
 
-        # Create booking
-        booking = Booking(
-            student_id=data['student_id'],
-            hostel_id=data['hostel_id'],
-            room_id=data['room_id'],
-            booking_date=datetime.strptime(data['booking_date'], '%Y-%m-%d'),
-            status='confirmed'
-        )
-        
-        # Update room occupancy
-        room.current_occupants += 1
-        if room.current_occupants >= room.capacity:
-            room.status = 'occupied'
-        
-        db.session.add(booking)
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Booking created successfully',
-            'booking_id': booking.id
-        }), 201
-        
-    except ValueError as e:
-        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+            db.session.add(hostel)
+            db.session.commit()
+
+            return jsonify({
+                'message': 'Hostel created successfully',
+                'hostel': {
+                    'id': hostel.id,
+                    'name': hostel.name,
+                    'location': hostel.location,
+                    'status': hostel.status
+                }
+            }), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
 
 @hostel_bp.route('/api/hostels/<int:hostel_id>/rooms', methods=['POST'])
-def create_room(hostel_id):
+def create_room_for_hostel(hostel_id):
     try:
         data = request.get_json()
-        
         hostel = Hostel.query.get(hostel_id)
         if not hostel:
             return jsonify({'error': 'Hostel not found'}), 404
@@ -890,21 +864,418 @@ def create_room(hostel_id):
             capacity=data['capacity'],
             status='available'
         )
-        
         db.session.add(room)
         hostel.total_rooms += 1
         db.session.commit()
-        
+
         return jsonify({
             'message': 'Room created successfully',
             'room_id': room.id
         }), 201
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+# === ROOMS ROUTES ===
+@hostel_bp.route('/api/rooms', methods=['GET', 'POST'])
+def handle_rooms():
+    if request.method == 'GET':
+        try:
+            rooms = Room.query.all()
+            return jsonify({
+                'rooms': [{
+                    'id': room.id,
+                    'hostel_id': room.hostel_id,
+                    'room_number': room.room_number,
+                    'capacity': room.capacity,
+                    'current_occupants': room.current_occupants,
+                    'status': room.status,
+                    'created_at': room.created_at.isoformat() if room.created_at else None
+                } for room in rooms]
+            }), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            required_fields = ['hostel_id', 'room_number', 'capacity']
+            if not all(field in data for field in required_fields):
+                return jsonify({'error': 'Missing required fields'}), 400
+
+            hostel = Hostel.query.get(data['hostel_id'])
+            if not hostel:
+                return jsonify({'error': 'Hostel not found'}), 404
+
+            room = Room(
+                hostel_id=data['hostel_id'],
+                room_number=data['room_number'],
+                capacity=data['capacity'],
+                status=data.get('status', 'available')
+            )
+
+            db.session.add(room)
+            hostel.total_rooms += 1
+            db.session.commit()
+
+            return jsonify({
+                'message': 'Room created successfully',
+                'room': {
+                    'id': room.id,
+                    'hostel_id': room.hostel_id,
+                    'room_number': room.room_number,
+                    'capacity': room.capacity,
+                    'status': room.status
+                }
+            }), 201
+
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+# === BOOKINGS ROUTES ===
+@hostel_bp.route('/api/bookings', methods=['GET', 'POST', 'OPTIONS'])
+@cross_origin()
+def handle_bookings():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    if request.method == 'GET':
+        try:
+            bookings = StudentRoomBooking.query.all()
+            return jsonify({
+                'bookings': [booking.to_dict() for booking in bookings]
+            }), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            required_fields = ['student_id', 'room_id', 'start_date', 'end_date']
+            if not all(field in data for field in required_fields):
+                return jsonify({'error': 'Missing required fields'}), 400
+
+            room = Room.query.get(data['room_id'])
+            if not room:
+                return jsonify({'error': 'Room not found'}), 404
+
+            if room.status != 'available' or room.current_occupants >= room.capacity:
+                return jsonify({'error': 'Room is not available'}), 400
+
+            booking = StudentRoomBooking(
+                student_id=data['student_id'],
+                room_id=data['room_id'],
+                start_date=datetime.strptime(data['start_date'], '%Y-%m-%d'),
+                end_date=datetime.strptime(data['end_date'], '%Y-%m-%d')
+            )
+
+            room.current_occupants += 1
+            if room.current_occupants >= room.capacity:
+                room.status = 'occupied'
+
+            db.session.add(booking)
+            db.session.commit()
+
+            return jsonify({
+                'message': 'Booking created successfully',
+                'booking_id': booking.id
+            }), 201
+
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+
+# === SINGLE HOSTEL DETAIL ===
+# Hostel Management Routes
+@app.route('/api/hostels', methods=['GET', 'POST'])
+def handle_hostels():
+    if request.method == 'GET':
+        try:
+            hostels = Hostel.query.all()
+            return jsonify({
+                'hostels': [{
+                    'id': hostel.id,
+                    'name': hostel.name,
+                    'location': hostel.location,
+                    'status': hostel.status,
+                    'total_rooms': len(hostel.rooms),
+                    'created_at': hostel.created_at.isoformat() if hostel.created_at else None
+                } for hostel in hostels]
+            }), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+
+            required_fields = ['name', 'location']
+            if not all(field in data for field in required_fields):
+                return jsonify({'error': 'Missing required fields'}), 400
+
+            hostel = Hostel(
+                name=data['name'],
+                location=data['location'],
+                status=data.get('status', 'active')
+            )
+
+            db.session.add(hostel)
+            db.session.commit()
+
+            return jsonify({
+                'message': 'Hostel created successfully',
+                'hostel': {
+                    'id': hostel.id,
+                    'name': hostel.name,
+                    'location': hostel.location,
+                    'status': hostel.status
+                }
+            }), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/rooms', methods=['GET', 'POST'])
+def handle_rooms():
+    if request.method == 'GET':
+        try:
+            rooms = Room.query.all()
+            return jsonify({
+                'rooms': [{
+                    'id': room.id,
+                    'hostel_id': room.hostel_id,
+                    'room_number': room.room_number,
+                    'capacity': room.capacity,
+                    'current_occupants': room.current_occupants or 0,
+                    'status': room.status,
+                    'hostel_name': room.hostel.name if room.hostel else None,
+                    'created_at': room.created_at.isoformat() if room.created_at else None
+                } for room in rooms]
+            }), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+
+            required_fields = ['hostel_id', 'room_number', 'capacity']
+            if not all(field in data for field in required_fields):
+                return jsonify({'error': 'Missing required fields'}), 400
+
+            # Check if hostel exists
+            hostel = Hostel.query.get(data['hostel_id'])
+            if not hostel:
+                return jsonify({'error': 'Hostel not found'}), 404
+
+            room = Room(
+                hostel_id=data['hostel_id'],
+                room_number=data['room_number'],
+                capacity=data['capacity'],
+                status=data.get('status', 'available')
+            )
+
+            db.session.add(room)
+            db.session.commit()
+
+            return jsonify({
+                'message': 'Room created successfully',
+                'room': {
+                    'id': room.id,
+                    'hostel_id': room.hostel_id,
+                    'room_number': room.room_number,
+                    'capacity': room.capacity,
+                    'status': room.status
+                }
+            }), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/bookings', methods=['GET', 'POST', 'OPTIONS'])
+@cross_origin()
+def handle_bookings():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    if request.method == 'GET':
+        try:
+            bookings = StudentRoomBooking.query.all()
+            return jsonify({
+                'bookings': [{
+                    'id': booking.id,
+                    'student_id': booking.student_id,
+                    'student_name': booking.student.name if booking.student else None,
+                    'room_id': booking.room_id,
+                    'room_number': booking.room.room_number if booking.room else None,
+                    'hostel_name': booking.room.hostel.name if booking.room and booking.room.hostel else None,
+                    'start_date': booking.start_date.isoformat() if booking.start_date else None,
+                    'end_date': booking.end_date.isoformat() if booking.end_date else None,
+                    'status': booking.status,
+                    'created_at': booking.created_at.isoformat() if booking.created_at else None
+                } for booking in bookings]
+            }), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+
+            required_fields = ['student_id', 'room_id']
+            if not all(field in data for field in required_fields):
+                return jsonify({'error': 'Missing required fields'}), 400
+
+            # Check if room exists
+            room = Room.query.get(data['room_id'])
+            if not room:
+                return jsonify({'error': 'Room not found'}), 404
+
+            # Check if room is available
+            if room.status != 'available' or (room.current_occupants and room.current_occupants >= room.capacity):
+                return jsonify({'error': 'Room is not available'}), 400
+
+            # Create booking
+            booking = StudentRoomBooking(
+                student_id=data['student_id'],
+                room_id=data['room_id'],
+                start_date=datetime.utcnow(),
+                status='confirmed'
+            )
+
+            # Update room occupancy
+            room.current_occupants = (room.current_occupants or 0) + 1
+            if room.current_occupants >= room.capacity:
+                room.status = 'occupied'
+
+            db.session.add(booking)
+            db.session.commit()
+
+            return jsonify({
+                'message': 'Booking created successfully',
+                'booking': {
+                    'id': booking.id,
+                    'student_id': booking.student_id,
+                    'room_id': booking.room_id,
+                    'status': booking.status
+                }
+            }), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/hostels/<int:hostel_id>', methods=['GET', 'PUT', 'DELETE'])
+def single_hostel(hostel_id):
+    hostel = Hostel.query.get_or_404(hostel_id)
+
+    if request.method == 'GET':
+        return jsonify({
+            'hostel': {
+                'id': hostel.id,
+                'name': hostel.name,
+                'location': hostel.location,
+                'status': hostel.status,
+                'rooms': [{
+                    'id': room.id,
+                    'room_number': room.room_number,
+                    'capacity': room.capacity,
+                    'status': room.status
+                } for room in hostel.rooms]
+            }
+        }), 200
+
+    elif request.method == 'PUT':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+
+            if 'name' in data:
+                hostel.name = data['name']
+            if 'location' in data:
+                hostel.location = data['location']
+            if 'status' in data:
+                hostel.status = data['status']
+
+            db.session.commit()
+            return jsonify({'message': 'Hostel updated successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'DELETE':
+        try:
+            # Check if hostel has rooms
+            if hostel.rooms:
+                return jsonify({'error': 'Cannot delete hostel with existing rooms'}), 400
+
+            db.session.delete(hostel)
+            db.session.commit()
+            return jsonify({'message': 'Hostel deleted successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/rooms/<int:room_id>', methods=['GET', 'PUT', 'DELETE'])
+def single_room(room_id):
+    room = Room.query.get_or_404(room_id)
+
+    if request.method == 'GET':
+        return jsonify({
+            'room': {
+                'id': room.id,
+                'hostel_id': room.hostel_id,
+                'room_number': room.room_number,
+                'capacity': room.capacity,
+                'current_occupants': room.current_occupants or 0,
+                'status': room.status,
+                'hostel_name': room.hostel.name if room.hostel else None
+            }
+        }), 200
+
+    elif request.method == 'PUT':
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+
+            if 'room_number' in data:
+                room.room_number = data['room_number']
+            if 'capacity' in data:
+                room.capacity = data['capacity']
+            if 'status' in data:
+                room.status = data['status']
+
+            db.session.commit()
+            return jsonify({'message': 'Room updated successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'DELETE':
+        try:
+            # Check if room has bookings
+            if room.bookings:
+                return jsonify({'error': 'Cannot delete room with existing bookings'}), 400
+
+            db.session.delete(room)
+            db.session.commit()
+            return jsonify({'message': 'Room deleted successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+#--------------------------------------------------------------------------hostles story above
 #POST /api/payments - create a new payment
 @app.route('/api/payments', methods=['GET'])
 def fetch_payments():
@@ -1448,6 +1819,55 @@ def create_fee_routes(app):
             app.logger.error(f"Error fetching clearance stats: {str(e)}")
             return jsonify({'success': False, 'message': 'Error fetching statistics'}), 500
 
+#-------------------------------------------------------------------------------------------------------------------------------------------
+    admin_bp = Blueprint('admin', __name__)
+
+    @admin_bp.route('/admin/pending-registrations', methods=['GET'])
+    def get_pending_registrations():
+        pending = Registration.query.filter_by(status='pending').all()
+        registrations = [{
+            'id': reg.id,
+            'student_name': reg.student_name,
+            'student_email': reg.student_email,
+            'student_id': reg.student_id,
+            'program_name': reg.program_name,
+            'department': reg.department,
+            'batch_year': reg.batch_year,
+            'submitted_at': reg.submitted_at
+        } for reg in pending]
+        
+        return jsonify(registrations=registrations), 200
+
+    @admin_bp.route('/admin/approve-registration/<int:registration_id>', methods=['PUT'])
+    def approve_registration(registration_id):
+        reg = Registration.query.get_or_404(registration_id)
+        
+        if reg.status != 'pending':
+            return jsonify({'error': 'Registration is not pending'}), 400
+        
+        reg.status = 'approved'
+        db.session.commit()
+        
+        return jsonify({'message': 'Registration approved'}), 200
+
+    @admin_bp.route('/admin/reject-registration/<int:registration_id>', methods=['PUT'])
+    def reject_registration(registration_id):
+        data = request.get_json()
+        reason = data.get('reason')
+        
+        if not reason:
+            return jsonify({'error': 'Rejection reason is required'}), 400
+
+        reg = Registration.query.get_or_404(registration_id)
+        
+        if reg.status != 'pending':
+            return jsonify({'error': 'Registration is not pending'}), 400
+        
+        reg.status = 'rejected'
+        reg.rejection_reason = reason  # Make sure this column exists in your model
+        db.session.commit()
+        
+        return jsonify({'message': 'Registration rejected'}), 200
 
 
 
