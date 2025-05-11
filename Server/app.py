@@ -5,7 +5,7 @@ from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_jwt_extended import (
     JWTManager, create_access_token,
-    jwt_required, get_jwt_identity
+    jwt_required, get_jwt_identity, create_refresh_token
 )
 from flask_cors import CORS
 from datetime import timedelta
@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 
 
-
+os.environ['FLASK_ENV'] = 'development'
 
 # Flask App Config
 app = Flask(__name__)
@@ -28,7 +28,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_updated_secret_key_here')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'super-secret-jwt-key')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=15)
+app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=30)
 basedir = os.path.abspath(os.path.dirname(__file__))
 UPLOAD_FOLDER = os.path.join(basedir, 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -42,8 +43,7 @@ db.init_app(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)
 api = Api(app)
-CORS(app, supports_credentials=True, origins=['http://localhost:5173'])
-
+CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}})
 
 
 
@@ -116,27 +116,31 @@ class Register(Resource):
             print(f"Unexpected error: {str(e)}")
             return {"error": "Internal server error"}, 500
 class Login(Resource):
-   
     def post(self):
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
 
-        # Find user by email
         user = User.query.filter_by(email=email).first()
 
-        # If no user found or password is incorrect, return error
         if not user or not user.check_password(password):
             return {"error": "Invalid credentials"}, 401
 
-        # Create JWT token with optional expiration
-        access_token = create_access_token(identity=user.id, expires_delta=timedelta(days=1))
+        # Access token: short-lived (e.g. 15 minutes)
+        access_token = create_access_token(
+            identity=user.id,
+            expires_delta=timedelta(minutes=15)
+        )
 
-        # Define a role-based redirect URL
+        # Refresh token: long-lived (e.g. 30 days)
+        refresh_token = create_refresh_token(identity=user.id)
+
+        # Role-based redirect URL
         redirect_url = f'/{user.role}/dashboard' if user.role in ['student', 'lecturer', 'admin'] else '/'
 
         return {
             "access_token": access_token,
+            "refresh_token": refresh_token,
             "user": {
                 "id": user.id,
                 "name": user.name,
@@ -145,16 +149,51 @@ class Login(Resource):
             },
             "redirect_url": redirect_url
         }, 200
-
 class Profile(Resource):
-    
-    @jwt_required()
+    @jwt_required()  # Ensure the user is authenticated
     def get(self):
-        user = User.query.get(get_jwt_identity())
+        user_id = get_jwt_identity()  # Get the user ID from the JWT token
+        user = User.query.get(user_id)  # Query the user based on the ID
+
         if not user:
             return {"error": "User not found"}, 404
-        return user.to_dict(rules=('-password_hash', 'student_profile', 'lecturer_profile')), 200
 
+        # Check the user's role and fetch the corresponding profile
+        if user.role == 'student':
+            # If the user is a student, get their student profile
+            student_profile = user.student_profile  # Assuming `student_profile` is a relationship
+            if not student_profile:
+                return {"error": "Student profile not found"}, 404
+
+            return jsonify({
+                "user": user.to_dict(rules=('id', 'name', 'email', 'role')),
+                "profile": student_profile.to_dict()  # Assuming you have a `to_dict()` method in the model
+            }), 200
+
+        elif user.role == 'lecturer':
+            # If the user is a lecturer, get their lecturer profile
+            lecturer_profile = user.lecturer_profile  # Assuming `lecturer_profile` is a relationship
+            if not lecturer_profile:
+                return {"error": "Lecturer profile not found"}, 404
+
+            return jsonify({
+                "user": user.to_dict(rules=('id', 'name', 'email', 'role')),
+                "profile": lecturer_profile.to_dict()  # Assuming you have a `to_dict()` method in the model
+            }), 200
+
+        return {"error": "User role is neither student nor lecturer"}, 400
+
+class RefreshToken(Resource):
+    @jwt_required(refresh=True)
+    def post(self):
+        current_user_id = get_jwt_identity()
+        
+        # Create a new access token
+        new_access_token = create_access_token(identity=current_user_id)
+        
+        return jsonify({
+            "access_token": new_access_token
+        })
 # -------------------- Admin Resource --------------------
 class AdminDashboard(Resource):
     @role_required('admin')
@@ -166,6 +205,7 @@ api.add_resource(Register, '/api/register')
 api.add_resource(Login, '/api/login')
 api.add_resource(Profile, '/api/profile')
 api.add_resource(AdminDashboard, '/api/admin_dashboard')
+api.add_resource(RefreshToken, '/api/auth/refresh')
 # -------------------- API Endpoints --------------------
 @app.route('/')
 def home():
@@ -308,6 +348,29 @@ def create_course():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': 'Failed to create course', 'details': str(e)}), 500
+
+@app.route('/api/student/courses', methods=['GET'])
+@jwt_required()
+@role_required('student')
+def get_student_courses():
+    current_user_id = get_jwt_identity()
+
+    student_profile = StudentProfile.query.filter_by(user_id=current_user_id).first()
+    if not student_profile:
+        return jsonify({'error': 'Student profile not found'}), 404
+
+    registrations = UnitRegistration.query.filter_by(student_id=student_profile.id).all()
+
+    courses = [{
+        'id': reg.course.id,
+        'code': reg.course.code,
+        'title': reg.course.title,
+        'description': reg.course.description,
+        'semester_id': reg.course.semester_id,
+        'program': reg.course.program
+    } for reg in registrations]
+
+    return jsonify(courses), 200
 
 @app.route('/admin/assign_lecturer', methods=['POST'])
 @role_required('admin')  # Your decorator to ensure only admins can access
@@ -938,4 +1001,4 @@ def update_clearance_status(student_id):
     return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5000)
