@@ -1,6 +1,6 @@
 import os
 from sqlalchemy.exc import SQLAlchemyError
-from flask import Flask, request, jsonify,send_from_directory, Blueprint
+from flask import Flask, request, jsonify, Blueprint
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_jwt_extended import (
@@ -8,8 +8,6 @@ from flask_jwt_extended import (
     jwt_required, get_jwt_identity
 )
 
- 
-from sqlalchemy import and_
 from datetime import datetime
 from flask_cors import CORS, cross_origin
 from datetime import timedelta
@@ -18,14 +16,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 from models import db, User, StudentProfile, LecturerProfile, Course, Semester, UnitRegistration,Grade, Announcement, AuditLog, DocumentRequest, Hostel, Room, StudentRoomBooking, FeeStructure, Payment, FeeClearance, Assignment, Registration
 from dotenv import load_dotenv
-from werkzeug.utils import secure_filename
+
 
 
 # Flask App Config
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
-    "postgresql://dashboard:y2025@localhost:5432/student_portal"    
+    "postgresql://dashboard:Student@localhost:5432/student_portal"    
 )
 
 
@@ -48,7 +46,7 @@ db.init_app(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)
 api = Api(app)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
 
 # -------------------- Role-Based Access Decorator --------------------
@@ -1220,6 +1218,38 @@ def single_hostel(hostel_id):
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
+        
+@app.route('/api/hostels', methods=['POST'])
+def create_hostel():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        name = data.get('name')
+        location = data.get('location')
+        status = data.get('status', 'active')  # default to active
+
+        if not name or not location:
+            return jsonify({'error': 'Name and location are required'}), 400
+
+        new_hostel = Hostel(name=name, location=location, status=status)
+        db.session.add(new_hostel)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Hostel created successfully',
+            'hostel': {
+                'id': new_hostel.id,
+                'name': new_hostel.name,
+                'location': new_hostel.location,
+                'status': new_hostel.status
+            }
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/rooms/<int:room_id>', methods=['GET', 'PUT', 'DELETE'])
 def single_room(room_id):
@@ -1269,6 +1299,51 @@ def single_room(room_id):
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
+        
+@app.route('/api/rooms', methods=['POST'])
+def create_room():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        room_number = data.get('room_number')
+        capacity = data.get('capacity')
+        hostel_id = data.get('hostel_id')
+        status = data.get('status', 'available')  # default to available
+
+        if not room_number or not capacity or not hostel_id:
+            return jsonify({'error': 'room_number, capacity, and hostel_id are required'}), 400
+
+        # Ensure hostel exists
+        hostel = Hostel.query.get(hostel_id)
+        if not hostel:
+            return jsonify({'error': 'Hostel not found'}), 404
+
+        new_room = Room(
+            room_number=room_number,
+            capacity=int(capacity),
+            hostel_id=hostel_id,
+            status=status
+        )
+        db.session.add(new_room)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Room created successfully',
+            'room': {
+                'id': new_room.id,
+                'room_number': new_room.room_number,
+                'capacity': new_room.capacity,
+                'status': new_room.status,
+                'hostel_id': new_room.hostel_id
+            }
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 #--------------------------------------------------------------------------hostles story above
 #POST /api/payments - create a new payment
 @app.route('/api/payments', methods=['GET'])
@@ -1283,9 +1358,9 @@ def fetch_payments():
         result.append({
             'id': p.id,
             'student_id': p.student_id,
-            'amount': float(p.amount),
-            'date': p.date.strftime('%Y-%m-%d'),
-            'status': p.status
+            'amount': float(p.amount_paid),
+            'date': p.payment_date.strftime('%Y-%m-%d'),
+            'method': p.payment_method
         })
 
     return jsonify({'payments': result}), 200
@@ -1386,7 +1461,7 @@ def create_grade():
         return jsonify({'error': str(e)}), 500
 
 # Additional routes needed for the frontend
-@grades_bp.route('/students', methods=['GET'])
+@grades_bp.route('/api/students', methods=['GET'])
 def get_students():
     try:
         students = User.query.filter_by(role='student').all()
@@ -1412,7 +1487,7 @@ def get_courses():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@grades_bp.route('/semesters/active', methods=['GET'])
+@grades_bp.route('/api/semesters/active', methods=['GET'])
 def get_active_semesters():
     try:
         active_semesters = Semester.query.filter_by(active=True).all()
@@ -1592,21 +1667,7 @@ def change_clearance_status(student_id):
 
     db.session.commit()
     return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
-    data = request.get_json()
     
-    # Only update what's in the model
-    if 'status' in data:
-        clearance_status.status = data['status']
-    
-    if 'cleared_on' in data:
-        try:
-            clearance_status.cleared_on = datetime.fromisoformat(data['cleared_on'])
-        except ValueError:
-            return jsonify({'success': False, 'message': 'Invalid date format'}), 400
-
-    db.session.commit()
-    return jsonify({'success': True, 'data': clearance_status.to_dict()}), 200
-
 @app.route('/api/admin/clearance', methods=['GET'])
 def get_all_clearance_statuses():
     if request.method == 'OPTIONS':
@@ -1863,6 +1924,84 @@ def create_fee_routes(app):
         
         return jsonify({'message': 'Registration rejected'}), 200
 
+# Get all fee structures
+@app.route('/api/fee-structures/', methods=['GET'])
+
+def get_all_fee_structures():
+    fee_structures = FeeStructure.query.all()
+    return jsonify([fs.to_dict() for fs in fee_structures]), 200
+
+# Get a specific fee structure by ID
+@app.route('/api/fee-structures/<int:id>', methods=['GET'])
+
+def get_fee_structure(id):
+    fs = FeeStructure.query.get_or_404(id)
+    return jsonify(fs.to_dict()), 200
+
+# Create a new fee structure
+@app.route('/api/fee-structures/', methods=['POST'])
+
+def create_fee_structure():
+    data = request.get_json()
+    try:
+        fs = FeeStructure(
+            course_id=data['course_id'],
+            hostel_id=data['hostel_id'],
+            semester_id=data['semester_id'],
+            amount=data['amount']
+        )
+        db.session.add(fs)
+        db.session.commit()
+        return jsonify(fs.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+# Update a fee structure
+@app.route('/api/fee-structures/<int:id>', methods=['PUT'])
+
+def update_fee_structure(id):
+    fs = FeeStructure.query.get_or_404(id)
+    data = request.get_json()
+    try:
+        fs.course_id = data.get('course_id', fs.course_id)
+        fs.hostel_id = data.get('hostel_id', fs.hostel_id)
+        fs.semester_id = data.get('semester_id', fs.semester_id)
+        fs.amount = data.get('amount', fs.amount)
+        db.session.commit()
+        return jsonify(fs.to_dict()), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+# Delete a fee structure
+@app.route('/api/fee-structures/<int:id>', methods=['DELETE'])
+def delete_fee_structure(id):
+    fs = FeeStructure.query.get_or_404(id)
+    try:
+        db.session.delete(fs)
+        db.session.commit()
+        return jsonify({'message': 'Fee structure deleted'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/admin/assign_lecturer', methods=['POST']) 
+def assign_lecturer_to_course():
+    data = request.get_json()
+    course_id = data.get('course_id')
+    lecturer_id = data.get('lecturer_id')
+
+    course = Course.query.get(course_id)
+    lecturer = LecturerProfile.query.get(lecturer_id)
+
+    if not course or not lecturer:
+        return jsonify({'error': 'Invalid course or lecturer ID'}), 404
+
+    course.lecturer_id = lecturer.id
+    db.session.commit()
+
+    return jsonify({'message': 'Lecturer assigned successfully', 'course': course.to_dict()})
 
 
 #......................................

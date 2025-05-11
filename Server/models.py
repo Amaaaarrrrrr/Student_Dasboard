@@ -343,7 +343,7 @@ class Hostel(db.Model):
     location = db.Column(db.String(255), nullable=False)
     capacity = db.Column(db.Integer, nullable=False)
     rooms = db.relationship('Room', back_populates='hostel')  
-    status = db.Column(db.String(50), default='Available') 
+    status = db.Column(db.String(50), default='Active') 
     created_at = db.Column(db.DateTime, default=datetime.utcnow) 
     fee_structures = db.relationship('FeeStructure', back_populates='hostel')
 
@@ -424,13 +424,15 @@ class FeeStructure(db.Model):
     def to_dict(self, rules=()):
         rules = rules or self.serialize_rules
         return {
-            'id': self.id,
-            'course': self.course.to_dict(),
-            'hostel': self.hostel.to_dict(),
-            'semester': self.semester.to_dict(),
-            'amount': self.amount,
-            'payments': [payment.to_dict() for payment in self.payments]
-        }
+        'id': self.id,
+        'course_id': self.course_id,
+        'hostel_id': self.hostel_id,
+        'semester_id': self.semester_id,
+        'amount': self.amount,
+        'course': self.course.to_dict() if self.course else None,
+        'hostel': self.hostel.to_dict() if self.hostel else None,
+        'semester': self.semester.to_dict() if self.semester else None
+    }
 
 class Payment(db.Model):
     __tablename__ = 'payments'
@@ -477,14 +479,12 @@ class FeeClearance(db.Model):
     def to_dict(self, rules=()):
         rules = rules or self.serialize_rules
         return {
-            'id': self.id,
-            'student_id': self.student_id,
-            'cleared_on': self.cleared_on.isoformat() if self.cleared_on else None,
-            'status': self.status,
-            'amount_due': self.amount_due,
-            'student_name': self.student_name
-
-        }
+        'id': self.id,
+        'course': self.course.name if self.course else None,
+        'hostel': self.hostel.name if self.hostel else None,
+        'semester': self.semester.name if self.semester else None,
+        'amount': self.amount
+    }
 class Assignment(db.Model):
     __tablename__ = 'assignments'
 
